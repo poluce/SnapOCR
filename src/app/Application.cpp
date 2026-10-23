@@ -41,6 +41,7 @@ constexpr auto kFlagHelp = "--help";
 constexpr auto kFlagVersion = "--version";
 constexpr auto kFlagSmokeTest = "--smoke-test";
 constexpr auto kFlagCaptureSelfTest = "--capture-selftest";
+constexpr auto kFlagSettings = "--settings";
 
 Q_LOGGING_CATEGORY(lcApp, "snapocr.app")
 
@@ -85,7 +86,10 @@ int Application::run(const QStringList& arguments)
     }
 
     const bool startHidden = args.contains(QStringLiteral("--tray"));
-    if (!startHidden || m_tray == nullptr || !m_tray->isAvailable()) {
+    if (args.contains(QString::fromLatin1(kFlagSettings))) {
+        showMainWindow();
+        showSettings();
+    } else if (!startHidden || m_tray == nullptr || !m_tray->isAvailable()) {
         showMainWindow();
     }
 
@@ -381,6 +385,16 @@ void Application::showMainWindow()
     if (m_mainWindow == nullptr) {
         return;
     }
+    // 首次显示或窗口跑到屏幕外时，居中到主屏可用区域。
+    const QScreen* screen = QGuiApplication::primaryScreen();
+    if (screen != nullptr) {
+        const QRect available = screen->availableGeometry();
+        if (!available.intersects(m_mainWindow->frameGeometry())) {
+            const QSize size = m_mainWindow->size();
+            m_mainWindow->move(available.center().x() - size.width() / 2,
+                               available.center().y() - size.height() / 2);
+        }
+    }
     m_mainWindow->show();
     m_mainWindow->raise();
     m_mainWindow->activateWindow();
@@ -391,7 +405,17 @@ void Application::showMainWindow()
 void Application::showSettings()
 {
     const common::AppSettings previous = m_settings;
-    ui::SettingsDialog dialog(m_settings, m_mainWindow.get());
+    // 不挂父窗口：QDialog 会按父窗口居中，主窗口贴边时会把对话框推出屏幕。
+    // 模态性由 exec() 保证，位置由下面的显式居中控制。
+    ui::SettingsDialog dialog(m_settings, nullptr);
+    // 兜底：父窗口可能贴近屏幕边缘，把对话框拉回可用区域中央。
+    const QScreen* screen = QGuiApplication::primaryScreen();
+    if (screen != nullptr) {
+        const QRect available = screen->availableGeometry();
+        dialog.adjustSize();
+        dialog.move(available.center().x() - dialog.width() / 2,
+                    available.center().y() - dialog.height() / 2);
+    }
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -574,6 +598,7 @@ void Application::printHelp() const
     printLine(QStringLiteral("  -h, --help            显示帮助"));
     printLine(QStringLiteral("  -v, --version         显示版本"));
     printLine(QStringLiteral("  --tray                启动后仅驻留托盘"));
+    printLine(QStringLiteral("  --settings            启动并直接打开设置"));
     printLine(QStringLiteral("  --smoke-test          启动自检（CI / 构建验证用）"));
     printLine(QStringLiteral("  --capture-selftest    屏幕捕获自检（诊断用）"));
 }

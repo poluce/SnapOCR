@@ -36,7 +36,8 @@ SnapOCR 的开发文档统一为**四份**，按“需求 → 设计 → 开发 
 ## 资源
 
 - [`assets/m0-window.png`](assets/m0-window.png) —— 阶段 0 主窗口实拍（历史记录）。
-- [`assets/phase1-main.png`](assets/phase1-main.png) —— 阶段一主窗口。
+- [`assets/phase1-main.png`](assets/phase1-main.png) —— 阶段一主窗口（含版本号）。
+- [`assets/phase1-settings.png`](assets/phase1-settings.png) —— 设置对话框（热键/保存/主题/自启/OCR/日志）。
 - [`assets/phase1-editor.png`](assets/phase1-editor.png) —— 阶段一标注编辑 + 工具条（含红色矩形标注）。
 - [`assets/phase1-ocr.png`](assets/phase1-ocr.png) —— 阶段一 OCR 结果窗（zh-Hans-CN，44ms/18 行）。
 
