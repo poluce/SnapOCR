@@ -73,6 +73,7 @@ private:
     QImage croppedSelection() const;
 
     void requestCopy();
+    void finishPendingTextInput();
     void requestSave();
     void requestOcr();
     void finish();

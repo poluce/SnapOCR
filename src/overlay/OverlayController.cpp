@@ -151,6 +151,7 @@ void OverlayController::showToolbar()
         connect(m_toolbar, &OverlayToolbar::toolSelected, this,
                 &OverlayController::enterEditingMode);
         connect(m_toolbar, &OverlayToolbar::selectToolSelected, this, [this]() {
+            finishPendingTextInput();
             m_toolbar->setSelectMode(true);
             if (m_editor != nullptr) {
                 m_editor->setSelectMode(true);
@@ -161,22 +162,26 @@ void OverlayController::showToolbar()
         connect(m_toolbar, &OverlayToolbar::ocrRequested, this, &OverlayController::requestOcr);
         connect(m_toolbar, &OverlayToolbar::cancelRequested, this, &OverlayController::cancel);
         connect(m_toolbar, &OverlayToolbar::undoRequested, this, [this]() {
+            finishPendingTextInput();
             if (m_editor != nullptr) {
                 m_editor->undo();
             }
         });
         connect(m_toolbar, &OverlayToolbar::redoRequested, this, [this]() {
+            finishPendingTextInput();
             if (m_editor != nullptr) {
                 m_editor->redo();
             }
         });
         connect(m_toolbar, &OverlayToolbar::colorChangeRequested, this, [this](const QColor& color) {
+            finishPendingTextInput();
             m_style.color = color;
             if (m_editor != nullptr) {
                 m_editor->setStyle(m_style);
             }
         });
         connect(m_toolbar, &OverlayToolbar::widthChangeRequested, this, [this](int width) {
+            finishPendingTextInput();
             m_style.width = width;
             if (m_editor != nullptr) {
                 m_editor->setStyle(m_style);
@@ -260,8 +265,18 @@ void OverlayController::onSelectionReleased()
     raiseToolbar();
 }
 
+// 文字输入框是编辑器内部的子控件，点工具条不会让它失焦（工具条不接收焦点），
+// 因此任何工具条动作前都要显式结束输入：有内容提交，没内容丢弃。
+void OverlayController::finishPendingTextInput()
+{
+    if (m_editor != nullptr && m_editor->canvas() != nullptr) {
+        m_editor->canvas()->commitOrDiscardTextInput();
+    }
+}
+
 void OverlayController::enterEditingMode(annotate::AnnotationKind kind)
 {
+    finishPendingTextInput();
     if (!m_selection.hasUsableSelection()) {
         return;
     }
@@ -404,6 +419,7 @@ QImage OverlayController::currentImage() const
 
 void OverlayController::requestCopy()
 {
+    finishPendingTextInput();
     const QImage image = currentImage();
     if (!image.isNull()) {
         emit copyRequested(image);
@@ -413,6 +429,7 @@ void OverlayController::requestCopy()
 
 void OverlayController::requestSave()
 {
+    finishPendingTextInput();
     const QImage image = currentImage();
     if (!image.isNull()) {
         emit saveRequested(image);
@@ -422,6 +439,7 @@ void OverlayController::requestSave()
 
 void OverlayController::requestOcr()
 {
+    finishPendingTextInput();
     const QImage image = croppedSelection();
     if (!image.isNull()) {
         emit ocrRequested(image);

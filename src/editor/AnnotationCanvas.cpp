@@ -467,7 +467,26 @@ void AnnotationCanvas::beginTextInput(const QPointF& imagePos)
     editor->setFocus();
 
     editor->installEventFilter(this);
-    connect(editor, &QTextEdit::destroyed, this, [this]() { m_textEditor = nullptr; });
+    // 必须校验身份：旧输入框是 deleteLater 销毁的，它的 destroyed 会在新输入框
+    // 创建之后才触发；直接无条件置空会把新输入框变成“野控件”（还显示着但已不受管理），
+    // 表现为画布上残留一个空文本框。
+    connect(editor, &QTextEdit::destroyed, this, [this, editor]() {
+        if (m_textEditor == editor) {
+            m_textEditor = nullptr;
+        }
+    });
+}
+
+void AnnotationCanvas::commitOrDiscardTextInput()
+{
+    if (m_textEditor == nullptr) {
+        return;
+    }
+    if (m_textEditor->toPlainText().trimmed().isEmpty()) {
+        cancelTextInput();  // 空输入：直接丢弃，画布上不留任何痕迹
+    } else {
+        commitTextInput();
+    }
 }
 
 void AnnotationCanvas::commitTextInput()
@@ -478,6 +497,9 @@ void AnnotationCanvas::commitTextInput()
     const QString text = m_textEditor->toPlainText();
     QTextEdit* editor = m_textEditor;
     m_textEditor = nullptr;
+    // deleteLater 之前先隐藏：否则在事件循环处理前，这个子控件仍会挡住画布点击。
+    editor->hide();
+    editor->setEnabled(false);
     editor->deleteLater();
 
     if (text.trimmed().isEmpty()) {
@@ -503,6 +525,9 @@ void AnnotationCanvas::cancelTextInput()
     }
     QTextEdit* editor = m_textEditor;
     m_textEditor = nullptr;
+    // deleteLater 之前先隐藏：否则在事件循环处理前，这个子控件仍会挡住画布点击。
+    editor->hide();
+    editor->setEnabled(false);
     editor->deleteLater();
     update();
 }

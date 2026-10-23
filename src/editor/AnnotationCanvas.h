@@ -31,6 +31,10 @@ public:
 
     void undo();
     void redo();
+    // 结束当前文字输入：有内容则提交为图元，没有内容则直接丢弃（不留下空标注）。
+    void commitOrDiscardTextInput();
+    bool isTextInputActive() const { return m_textEditor != nullptr; }
+
     bool canUndo() const;
     bool canRedo() const;
 

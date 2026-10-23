@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QImage>
+#include <QTextEdit>
 
 #include "annotate/AnnotationDocument.h"
 #include "editor/AnnotationCanvas.h"
@@ -36,6 +37,9 @@ private slots:
     void deleteRemovesSelectedItem();
     void stepNumberIncrements();
     void switchingToolKeepsExistingItems();
+    void emptyTextInputLeavesNoItem();
+    void typedTextInputCommitsOneItem();
+    void clickingNewPositionDiscardsEmptyTextInput();
     void resettingBaseImageClearsItems();
 
 private:
@@ -193,6 +197,56 @@ void AnnotationCanvasTest::resettingBaseImageClearsItems()
     QCOMPARE(m_document.items().size(), 1);
 
     m_document.setBaseImage(makeBaseImage(800, 600));
+    QCOMPARE(m_document.items().size(), 0);
+}
+
+// 文字工具：点了位置但没输入文字，不应产生任何图元。
+void AnnotationCanvasTest::emptyTextInputLeavesNoItem()
+{
+    m_canvas->setTool(annotate::AnnotationKind::Text);
+    QTest::mouseClick(m_canvas, Qt::LeftButton, Qt::NoModifier, QPoint(60, 60));
+    QTest::qWait(30);
+    QVERIFY(m_canvas->isTextInputActive());
+
+    m_canvas->commitOrDiscardTextInput();
+    QVERIFY(!m_canvas->isTextInputActive());
+    QCOMPARE(m_document.items().size(), 0);
+}
+
+// 文字工具：输入内容后提交，得到一个 Text 图元。
+void AnnotationCanvasTest::typedTextInputCommitsOneItem()
+{
+    m_canvas->setTool(annotate::AnnotationKind::Text);
+    QTest::mouseClick(m_canvas, Qt::LeftButton, Qt::NoModifier, QPoint(70, 70));
+    QTest::qWait(30);
+    QVERIFY(m_canvas->isTextInputActive());
+
+    auto* editor = m_canvas->findChild<QTextEdit*>(QStringLiteral("snapocrTextEditor"));
+    QVERIFY(editor != nullptr);
+    editor->setPlainText(QStringLiteral("测试文字"));
+
+    m_canvas->commitOrDiscardTextInput();
+    QCOMPARE(m_document.items().size(), 1);
+    QCOMPARE(m_document.items().first().kind, annotate::AnnotationKind::Text);
+    QCOMPARE(m_document.items().first().text, QStringLiteral("测试文字"));
+}
+
+// 空输入状态下点击画布另一个位置：上一个空文本框必须被丢弃，不残留。
+void AnnotationCanvasTest::clickingNewPositionDiscardsEmptyTextInput()
+{
+    m_canvas->setTool(annotate::AnnotationKind::Text);
+    QTest::mouseClick(m_canvas, Qt::LeftButton, Qt::NoModifier, QPoint(50, 50));
+    QTest::qWait(30);
+    QVERIFY(m_canvas->isTextInputActive());
+
+    // 在画布别处再点一下（模拟“没输入文字就换位置”）
+    m_canvas->commitOrDiscardTextInput();
+    QTest::mouseClick(m_canvas, Qt::LeftButton, Qt::NoModifier, QPoint(350, 270));
+    QTest::qWait(30);
+
+    QCOMPARE(m_document.items().size(), 0);
+    QVERIFY(m_canvas->isTextInputActive());  // 新位置打开了一个新的输入框
+    m_canvas->commitOrDiscardTextInput();
     QCOMPARE(m_document.items().size(), 0);
 }
 
