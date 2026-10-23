@@ -4,10 +4,13 @@
 #include <QColorDialog>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QEvent>
 #include <QFrame>
+#include <QHelpEvent>
 #include <QLabel>
 #include <QToolButton>
 
+#include "overlay/ToolbarTooltip.h"
 #include "ui/ToolIcons.h"
 
 namespace snapocr::overlay {
@@ -159,13 +162,40 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     rootLayout->addWidget(makeSeparator());
     rootLayout->addWidget(ocrButton);
     rootLayout->addWidget(saveButton);
-    rootLayout->addWidget(copyButton);
     rootLayout->addWidget(cancelButton);
+    rootLayout->addWidget(copyButton);  // 勾号固定在最右侧
 
     setEditingMode(false);
     setCurrentColor(QColor(QStringLiteral("#FF3B30")));
     setCurrentWidth(3);
     applyStyleSheet();
+}
+
+bool OverlayToolbar::event(QEvent* event)
+{
+    if (event->type() == QEvent::ToolTip) {
+        auto* help = static_cast<QHelpEvent*>(event);
+        QWidget* hit = childAt(help->pos());
+        while (hit != nullptr && hit != this) {
+            if (!hit->toolTip().isEmpty()) {
+                ToolbarTooltip::instance()->showFor(hit, hit->toolTip());
+                return true;  // 阻止 Qt 默认提示（会被全屏覆盖层盖住）
+            }
+            hit = hit->parentWidget();
+        }
+        hideTooltipNow();
+        return true;
+    }
+    if (event->type() == QEvent::Leave || event->type() == QEvent::Hide
+        || event->type() == QEvent::WindowDeactivate) {
+        hideTooltipNow();
+    }
+    return QWidget::event(event);
+}
+
+void OverlayToolbar::hideTooltipNow()
+{
+    ToolbarTooltip::instance()->hideNow();
 }
 
 void OverlayToolbar::applyStyleSheet()

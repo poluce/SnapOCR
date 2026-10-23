@@ -4,6 +4,7 @@
 #include <QWidget>
 
 #include "overlay/OverlayToolbar.h"
+#include "overlay/ToolbarTooltip.h"
 
 using namespace snapocr;
 using namespace snapocr::overlay;
@@ -127,6 +128,14 @@ void OverlayToolbarTest::savePreviewWhenRequested()
     editingMode.show();
     QVERIFY(QTest::qWaitForWindowExposed(&editingMode));
     QVERIFY(editingMode.grab().save(outDir + QStringLiteral("/toolbar_editing.png")));
+
+    // 提示气泡外观
+    ToolbarTooltip* tooltip = ToolbarTooltip::instance();
+    tooltip->showFor(&editingMode, QStringLiteral("复制到剪贴板 Enter"));
+    QTest::qWait(50);  // offscreen 平台不支持 raise/expose，直接渲染即可
+    QVERIFY(tooltip->width() > 40);
+    QVERIFY(tooltip->grab().save(outDir + QStringLiteral("/toolbar_tooltip.png")));
+    tooltip->hideNow();
 }
 
 QTEST_MAIN(OverlayToolbarTest)

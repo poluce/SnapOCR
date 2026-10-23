@@ -40,8 +40,12 @@ signals:
     void colorChangeRequested(const QColor& color);
     void widthChangeRequested(int width);
 
+protected:
+    bool event(QEvent* event) override;
+
 private:
     void applyStyleSheet();
+    void hideTooltipNow();
 
     QWidget* m_toolGroup = nullptr;
     QWidget* m_styleGroup = nullptr;
