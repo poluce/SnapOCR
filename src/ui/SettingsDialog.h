@@ -22,6 +22,9 @@ public:
 
     snapocr::common::AppSettings settings() const;
 
+protected:
+    void showEvent(QShowEvent* event) override;
+
 private:
     void loadIntoUi(const snapocr::common::AppSettings& settings);
     void collectFromUi();

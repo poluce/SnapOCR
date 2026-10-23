@@ -34,6 +34,10 @@ public:
     void beginOcrCapture();
     void cancel();
 
+    // 覆盖层激活期间由全局热键（Esc/Enter）调用，规避窗口无焦点时收不到按键的问题。
+    void requestConfirm();
+    void requestCancel();
+
     bool isActive() const { return m_active; }
     bool isEditing() const { return m_editor != nullptr; }
 
@@ -41,6 +45,7 @@ public:
     annotate::AnnotationStyle annotationStyle() const { return m_style; }
 
 signals:
+    void started();
     void copyRequested(const QImage& image);
     void saveRequested(const QImage& image);
     void ocrRequested(const QImage& image);

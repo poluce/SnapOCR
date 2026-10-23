@@ -262,6 +262,10 @@ void OverlayWindow::mouseReleaseEvent(QMouseEvent* event)
         return;
     }
     m_dragging = false;
+    {
+        const QPoint relPhysical = physicalFromGlobal(event->globalPosition());
+        const QRect sel = m_selection->rect();
+    }
 
     // 纯单击（几乎无移动）视为清空选区。
     const QRect current = m_selection->rect();

@@ -56,6 +56,19 @@ void OverlayController::beginOcrCapture()
     m_captureService->captureAllScreens();
 }
 
+void OverlayController::requestConfirm()
+{
+    if (!m_active) {
+        return;
+    }
+    requestCopy();
+}
+
+void OverlayController::requestCancel()
+{
+    cancel();
+}
+
 void OverlayController::cancel()
 {
     if (!m_active) {
@@ -93,6 +106,7 @@ void OverlayController::onCaptured(const capture::CaptureResult& result)
 
     m_active = true;
     buildOverlays();
+    emit started();
     showToolbar();
     hideToolbar();  // 先隐藏，等选区出现再显示
     focusOverlay();

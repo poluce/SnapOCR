@@ -159,7 +159,11 @@ bool Application::initializeServices()
             &Application::runOcr);
     connect(m_overlayController, &overlay::OverlayController::errorOccurred, this,
             &Application::onCaptureError);
+    connect(m_overlayController, &overlay::OverlayController::started, this, [this]() {
+        registerOverlayHotkeys(true);
+    });
     connect(m_overlayController, &overlay::OverlayController::finished, this, [this]() {
+        registerOverlayHotkeys(false);
         if (m_mainWindow != nullptr) {
             m_mainWindow->setStatusText(QStringLiteral("就绪"));
         }
@@ -172,6 +176,16 @@ bool Application::initializeServices()
     m_hotkeys = new HotkeyManager(this);
     connect(m_hotkeys, &HotkeyManager::captureRequested, this, &Application::startCapture);
     connect(m_hotkeys, &HotkeyManager::ocrRequested, this, &Application::startOcrCapture);
+    connect(m_hotkeys, &HotkeyManager::overlayCancelRequested, this, [this]() {
+        if (m_overlayController != nullptr) {
+            m_overlayController->requestCancel();
+        }
+    });
+    connect(m_hotkeys, &HotkeyManager::overlayConfirmRequested, this, [this]() {
+        if (m_overlayController != nullptr) {
+            m_overlayController->requestConfirm();
+        }
+    });
     applyHotkeys();
 
     // 设置里的开机自启状态与注册表对齐（失败只记录，不阻塞启动）。
@@ -252,11 +266,32 @@ void Application::updateHotkeyLabels()
     }
 }
 
+void Application::registerOverlayHotkeys(bool enabled)
+{
+    if (m_hotkeys == nullptr) {
+        return;
+    }
+    if (enabled) {
+        // 覆盖层显示期间临时占用 Esc / Enter：窗口没焦点时也能退出或确认。
+        m_hotkeys->registerHotkey(HotkeyManager::Action::OverlayCancel, QStringLiteral("Esc"),
+                                  nullptr);
+        m_hotkeys->registerHotkey(HotkeyManager::Action::OverlayConfirm, QStringLiteral("Enter"),
+                                  nullptr);
+    } else {
+        m_hotkeys->unregisterHotkey(HotkeyManager::Action::OverlayCancel);
+        m_hotkeys->unregisterHotkey(HotkeyManager::Action::OverlayConfirm);
+    }
+}
+
 void Application::startCapture()
 {
     qCDebug(lcApp, "startCapture requested");
-    if (m_overlayController == nullptr || m_overlayController->isActive()) {
+    if (m_overlayController == nullptr) {
         return;
+    }
+    if (m_overlayController->isActive()) {
+        // 已在进行中：先取消再重开，避免“热键没反应”的困惑。
+        m_overlayController->cancel();
     }
     if (m_mainWindow != nullptr) {
         m_mainWindow->setStatusText(QStringLiteral("截图：拖拽选择区域"));
@@ -267,8 +302,11 @@ void Application::startCapture()
 void Application::startOcrCapture()
 {
     qCDebug(lcApp, "startOcrCapture requested");
-    if (m_overlayController == nullptr || m_overlayController->isActive()) {
+    if (m_overlayController == nullptr) {
         return;
+    }
+    if (m_overlayController->isActive()) {
+        m_overlayController->cancel();
     }
     if (m_mainWindow != nullptr) {
         m_mainWindow->setStatusText(QStringLiteral("取字：拖拽选择要识别的区域"));
@@ -405,17 +443,8 @@ void Application::showMainWindow()
 void Application::showSettings()
 {
     const common::AppSettings previous = m_settings;
-    // 不挂父窗口：QDialog 会按父窗口居中，主窗口贴边时会把对话框推出屏幕。
-    // 模态性由 exec() 保证，位置由下面的显式居中控制。
-    ui::SettingsDialog dialog(m_settings, nullptr);
-    // 兜底：父窗口可能贴近屏幕边缘，把对话框拉回可用区域中央。
-    const QScreen* screen = QGuiApplication::primaryScreen();
-    if (screen != nullptr) {
-        const QRect available = screen->availableGeometry();
-        dialog.adjustSize();
-        dialog.move(available.center().x() - dialog.width() / 2,
-                    available.center().y() - dialog.height() / 2);
-    }
+    // 保持父窗口（正确的模态与 z-order）；位置由 SettingsDialog::showEvent 夹取进屏幕。
+    ui::SettingsDialog dialog(m_settings, m_mainWindow.get());
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }

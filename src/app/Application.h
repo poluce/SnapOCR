@@ -50,6 +50,7 @@ private:
 
     bool initializeServices();
     void applyHotkeys();
+    void registerOverlayHotkeys(bool enabled);
     void updateHotkeyLabels();
 
     void startCapture();

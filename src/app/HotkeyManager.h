@@ -18,7 +18,11 @@ public:
     enum class Action
     {
         Capture = 1,
-        Ocr = 2
+        Ocr = 2,
+        // 覆盖层显示期间临时注册：即使窗口没有键盘焦点（后台进程被前台锁挡住），
+        // Esc/Enter 也必须有效，否则用户无法退出截图。
+        OverlayCancel = 3,
+        OverlayConfirm = 4
     };
 
     explicit HotkeyManager(QObject* parent = nullptr);
@@ -41,6 +45,8 @@ public:
 signals:
     void captureRequested();
     void ocrRequested();
+    void overlayCancelRequested();
+    void overlayConfirmRequested();
 
 private:
     void handleHotkey(int id);

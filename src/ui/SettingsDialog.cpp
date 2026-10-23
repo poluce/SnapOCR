@@ -1,6 +1,9 @@
 #include "ui/SettingsDialog.h"
 
 #include <QCheckBox>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QShowEvent>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -128,6 +131,39 @@ SettingsDialog::SettingsDialog(const common::AppSettings& settings, QWidget* par
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
     loadIntoUi(settings);
+}
+
+void SettingsDialog::showEvent(QShowEvent* event)
+{
+    QDialog::showEvent(event);
+
+    // 首次显示时把窗口夹取到所在屏幕的可用区域内：
+    // QDialog 默认按父窗口居中，父窗口贴边时对话框会被推出屏幕。
+    const QRect frameBefore = frameGeometry();
+    QScreen* screen = QGuiApplication::screenAt(frameBefore.center());
+    if (screen == nullptr) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (screen == nullptr) {
+        return;
+    }
+    const QRect available = screen->availableGeometry();
+    QRect target = frameBefore;
+    if (target.right() > available.right()) {
+        target.moveRight(available.right() - 8);
+    }
+    if (target.bottom() > available.bottom()) {
+        target.moveBottom(available.bottom() - 8);
+    }
+    if (target.left() < available.left()) {
+        target.moveLeft(available.left() + 8);
+    }
+    if (target.top() < available.top()) {
+        target.moveTop(available.top() + 8);
+    }
+    if (target.topLeft() != frameBefore.topLeft()) {
+        move(target.topLeft());
+    }
 }
 
 void SettingsDialog::loadIntoUi(const common::AppSettings& settings)

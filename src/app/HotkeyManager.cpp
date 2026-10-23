@@ -225,6 +225,12 @@ void HotkeyManager::handleHotkey(int id)
     case Action::Ocr:
         emit ocrRequested();
         break;
+    case Action::OverlayCancel:
+        emit overlayCancelRequested();
+        break;
+    case Action::OverlayConfirm:
+        emit overlayConfirmRequested();
+        break;
     }
 }
 

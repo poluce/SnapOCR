@@ -102,12 +102,13 @@ $hasImage = $false
 try { $hasImage = [System.Windows.Forms.Clipboard]::ContainsImage() } catch { }
 if ($hasImage) {
     $img = [System.Windows.Forms.Clipboard]::GetImage()
-    # Synthetic input can be affected by OS activation timing, which may shift the
-    # resulting selection; only require a plausible size and report the actual one.
-    if ($img.Width -ge 200 -and $img.Height -ge 200) {
+    # Strict assertion: the drag goes from physical (400,300) to (1200,900), so the
+    # captured image must be exactly 801x601 physical pixels (inclusive endpoints).
+    # A different size means the selection was created at the wrong position/DPI.
+    if ($img.Width -eq 801 -and $img.Height -eq 601) {
         Pass "F1 -> selection -> Enter copied image ($($img.Width)x$($img.Height))"
     } else {
-        Fail "clipboard image too small: $($img.Width)x$($img.Height)"
+        Fail "selection size mismatch: got $($img.Width)x$($img.Height), expected 801x601"
     }
     $img.Dispose()
 } else {
