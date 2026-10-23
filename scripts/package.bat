@@ -82,15 +82,20 @@ if errorlevel 1 (
 
 echo [INFO] Creating zip
 if exist "%ZIP_PATH%" del /q "%ZIP_PATH%"
-pushd "%DIST_ROOT%" >nul
-powershell -NoProfile -Command "Compress-Archive -Path 'SnapOCR-%VERSION%' -DestinationPath '%ZIP_PATH%' -Force"
+rem 用 Windows 自带 bsdtar 打包：Compress-Archive 在 PowerShell 5.1 下会写出
+rem 反斜杠分隔的条目名（非标准 zip），跨平台解压会失败。tar -a 生成标准 zip。
+where tar.exe >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] Compress-Archive failed.
-    popd >nul
+    echo [ERROR] tar.exe not found. Windows 10 1803+ should provide it.
     popd >nul
     exit /b 1
 )
-popd >nul
+tar -a -c -f "%ZIP_PATH%" -C "%DIST_ROOT%" "SnapOCR-%VERSION%"
+if errorlevel 1 (
+    echo [ERROR] tar packaging failed.
+    popd >nul
+    exit /b 1
+)
 
 echo [OK] Package ready:
 echo      %PKG_DIR%
