@@ -1,18 +1,17 @@
 # AGENTS.md
 
-本文件面向在本仓库工作的编码 Agent（以及人类协作者）。**先读本文件，再读 `PLAN.md` 与 `docs/`。**
+本文件面向在本仓库工作的编码 Agent（以及人类协作者）。**先读本文件，再读 `docs/` 下的四份文档。**
 
 ## 项目是什么
 
 **SnapOCR**：Windows 10/11 上的轻量截图 + 标注 + OCR 工具（C++20 / Qt 6.11 Widgets / MSVC / CMake + Ninja）。
-当前阶段：**M0 已完成**（仓库、计划文档、可编译骨架、CI），下一阶段 M1 屏幕捕获与选区。
+当前阶段：**M0 已完成**（仓库、四份文档、可编译骨架、CI），下一阶段 M1 屏幕捕获与选区（状态以 [完成情况](docs/04-完成情况.md) 为准）。
 
-- 总计划与决策：`PLAN.md`
-- 文档索引与权威顺序：`docs/README.md`
-- 需求编号与验收：`docs/01-product-requirements.md`
-- 架构与契约：`docs/02-technical-design.md`
-- 任务分解：`docs/03-roadmap.md`
-- 工程规范：`docs/04-dev-conventions.md`
+- 文档索引与维护规则：`docs/README.md`
+- 需求与验收：`docs/01-需求文档.md`
+- 架构与契约：`docs/02-设计文档.md`
+- 环境、构建、规范与任务：`docs/03-开发文档.md`
+- 实际进度与验收证据：`docs/04-完成情况.md`
 
 ## 构建与测试（Windows）
 
@@ -58,7 +57,7 @@ main.cpp
 1. 业务模型（capture/annotate/ocr）不依赖窗口类，保证可单测。
 2. UI 不直接调用 Win32 捕获/热键 API，必须经 `platform/win32` 或服务层。
 3. OCR 业务代码不得直接 `#include <winrt/...>`，只能通过 `IOcrEngine`。
-4. 跨模块只传值类型或信号；坐标以**物理像素**为权威（见技术设计 §4）。
+4. 跨模块只传值类型或信号；坐标以**物理像素**为权威（见设计文档 §4）。
 5. 主线程禁止 >16ms 阻塞操作；捕获与 OCR 在 worker 线程完成、结果回主线程。
 
 ## 硬性约束
@@ -67,13 +66,13 @@ main.cpp
 - 不申请管理员权限；不装全局键盘钩子；不注入其他进程。
 - 日志禁止记录 OCR 原文/剪贴板内容/用户截图路径中的敏感信息。
 - 截图/导出一律按屏幕物理像素 1:1，禁止经过缩放或控件截图导出。
-- 第三方依赖必须登记到 `docs/02-technical-design.md` §14（版本/许可证/用途）。
-- 改需求先改 `docs/01` 与 `PLAN.md`；改契约先改 `docs/02` 或补 ADR；禁止“先写代码再补文档”。
+- 第三方依赖必须登记到 `docs/02-设计文档.md` §14（版本/许可证/用途）。
+- 改需求先改 `docs/01-需求文档.md`；改契约先改 `docs/02-设计文档.md`（重大决策记 §17）；同步更新完成情况；禁止“先写代码再补文档”。
 
 ## 工作习惯
 
 - 回答、注释、提交说明用**简体中文**；代码标识符/文件名用英文；UTF-8 无 BOM，中文直写（禁止 `\uXXXX`）。
-- 代码风格以根 `.clang-format` 为准；提交遵循 Conventional Commits（见 `docs/04`）。
+- 代码风格以根 `.clang-format` 为准；提交遵循 Conventional Commits（见 `docs/03-开发文档.md` §10）。
 - **提交需用户明确要求**：不要擅自 `git add`/`commit`/`push` 工作区修改；不要覆盖/回滚他人未提交的改动。
 - 修复 bug 先补回归测试；新增核心逻辑必须有单测；发版前跑手测矩阵。
 - 构建产物、日志、临时文件不得入库（见 `.gitignore`）。
@@ -81,7 +80,7 @@ main.cpp
 
 ## 并行协作（Agent Teams）
 
-M1 起可按写域并行（见 `docs/03-roadmap.md` §8）：
+M1 起可按写域并行（见 `docs/03-开发文档.md` §8）：
 
 | 写域 | 责任 |
 |------|------|
@@ -90,7 +89,7 @@ M1 起可按写域并行（见 `docs/03-roadmap.md` §8）：
 | `src/ocr/` | OCR 引擎与基准 |
 | `src/app/`、`src/ui/`、`tests/`、`scripts/`、`.github/` | 系统集成、测试、CI |
 
-共享契约（`CaptureResult`、`SelectionModel`、`AnnotationDocument`、`IOcrEngine`、`Settings`）由 Lead 定稿后方可并行实现；跨线接口变更先改技术设计并通知所有写者；写域不重叠，集成前跑完整构建与测试。
+共享契约（`CaptureResult`、`SelectionModel`、`AnnotationDocument`、`IOcrEngine`、`Settings`）由 Lead 定稿后方可并行实现；跨线接口变更先改设计文档并通知所有写者；写域不重叠，集成前跑完整构建与测试。
 
 ## 常用检查
 

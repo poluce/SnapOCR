@@ -21,7 +21,7 @@ jobs:
         with:
           # 说明：aqtinstall 3.3.0 尚不支持 Qt 6.11 的新仓库布局（qt6_6111_*），
           # 因此 CI 固定 Qt 6.10.3；本机开发使用 Qt 6.11.1，源码保持 Qt 6.5+ 兼容。
-          # 待 aqtinstall 支持 6.11 后统一升级（见 docs/02-technical-design.md §11.3）。
+          # 待 aqtinstall 支持 6.11 后统一升级（见 docs/02-设计文档.md §11.3）。
           version: '6.10.3'
           arch: 'win64_msvc2022_64'
           cache: true
