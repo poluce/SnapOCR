@@ -265,6 +265,18 @@ void OverlayController::enterEditingMode(annotate::AnnotationKind kind)
         return;
     }
 
+    // 已在编辑态：只切换工具，绝不能重新 setBaseImage ——
+    // AnnotationDocument::setBaseImage() 会 clear() 图元，曾导致
+    // “画完矩形再点椭圆，矩形被删掉”。
+    if (m_editor != nullptr) {
+        m_editor->setTool(kind);
+        m_toolbar->setEditingMode(true);
+        m_toolbar->setCurrentTool(kind);
+        m_editor->raise();
+        raiseToolbar();
+        return;
+    }
+
     const QImage cropped = croppedSelection();
     if (cropped.isNull()) {
 

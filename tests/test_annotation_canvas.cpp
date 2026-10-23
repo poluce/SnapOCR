@@ -35,6 +35,8 @@ private slots:
     void redoRestoresItem();
     void deleteRemovesSelectedItem();
     void stepNumberIncrements();
+    void switchingToolKeepsExistingItems();
+    void resettingBaseImageClearsItems();
 
 private:
     void dragFrom(const QPoint& from, const QPoint& to);
@@ -160,6 +162,38 @@ void AnnotationCanvasTest::stepNumberIncrements()
     QCOMPARE(m_document.items().size(), 2);
     QCOMPARE(m_document.items().at(0).stepNumber, 1);
     QCOMPARE(m_document.items().at(1).stepNumber, 2);
+}
+
+// 回归：画完矩形后切换椭圆工具，已画的矩形必须保留。
+// （曾因 OverlayController 每次点工具都重新 setBaseImage 导致图元被清空）
+void AnnotationCanvasTest::switchingToolKeepsExistingItems()
+{
+    m_canvas->setTool(annotate::AnnotationKind::Rectangle);
+    dragFrom(QPoint(30, 30), QPoint(120, 90));
+    QCOMPARE(m_document.items().size(), 1);
+
+    m_canvas->setTool(annotate::AnnotationKind::Ellipse);
+    dragFrom(QPoint(140, 120), QPoint(220, 180));
+
+    QCOMPARE(m_document.items().size(), 2);
+    QCOMPARE(m_document.items().at(0).kind, annotate::AnnotationKind::Rectangle);
+    QCOMPARE(m_document.items().at(1).kind, annotate::AnnotationKind::Ellipse);
+
+    // 再切第三次工具，仍然全部保留
+    m_canvas->setTool(annotate::AnnotationKind::Arrow);
+    QCOMPARE(m_document.items().size(), 2);
+}
+
+// 文档语义：setBaseImage() 表示“载入新的底图”，会清空图元。
+// 因此编辑器只在首次进入标注时调用一次，切换工具时禁止再调用。
+void AnnotationCanvasTest::resettingBaseImageClearsItems()
+{
+    m_canvas->setTool(annotate::AnnotationKind::Rectangle);
+    dragFrom(QPoint(30, 30), QPoint(120, 90));
+    QCOMPARE(m_document.items().size(), 1);
+
+    m_document.setBaseImage(makeBaseImage(800, 600));
+    QCOMPARE(m_document.items().size(), 0);
 }
 
 QTEST_MAIN(AnnotationCanvasTest)
