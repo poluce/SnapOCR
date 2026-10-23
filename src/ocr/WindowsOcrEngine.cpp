@@ -9,12 +9,16 @@
 #include <utility>
 #include <vector>
 
+#include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QThread>
 #include <QImage>
 #include <QStringList>
 
 // C++/WinRT 头文件必须包含 base.h 与 Foundation/Collections 投影，
 // 否则 auto 返回类型（begin()/Size()/get()）会报 C3779 未定义。
+#include <objbase.h>
+
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -62,12 +66,42 @@ QString hresultToUserMessage(const winrt::hresult_error& error)
     return QStringLiteral("OCR 识别失败，请重试（错误码 %1）。").arg(hresultToHex(error.code()));
 }
 
+// 当前线程是否已是单线程公寓（Qt GUI 主线程在 Windows 上就是 STA）。
+// WinRT 的 init_apartment(multi_threaded) 在 STA 线程上会触发 Debug CRT 断言
+// `!is_sta_thread()`（Release 下行为不可预期），必须先检测再决定。
+// 当前线程是否是 Qt 的 GUI 线程（QCoreApplication::instance() 所在线程）。
+// 即使该线程未被初始化为 STA，在 GUI 线程上阻塞等待 WinRT 异步结果也会死锁
+// （没有消息泵驱动完成回调），因此必须一并拒绝。
+bool isGuiThread()
+{
+    const QCoreApplication* app = QCoreApplication::instance();
+    return app != nullptr && QThread::currentThread() == app->thread();
+}
+
+bool isStaApartment()
+{
+    APTTYPE apartmentType{};
+    APTTYPEQUALIFIER qualifier{};
+    const HRESULT hr = ::CoGetApartmentType(&apartmentType, &qualifier);
+    if (FAILED(hr))
+    {
+        return false;
+    }
+    return apartmentType == APTTYPE_STA || apartmentType == APTTYPE_MAINSTA;
+}
+
 // 初始化当前线程的 COM 公寓。
 // recognize() 在 worker 线程使用多线程公寓；语言枚举在主线程优先使用单线程公寓
 // （与 Qt/Windows 的 OLE 初始化兼容）。已初始化时 init_apartment 会抛
 // RPC_E_CHANGED_MODE，这里忽略并沿用现有公寓。
 void ensureApartment(bool multiThreaded)
 {
+    if (multiThreaded && isStaApartment())
+    {
+        // 不在这里切公寓（切换会失败或断言）；调用方应改到后台线程执行。
+        qCWarning(lcOcr) << "OCR 引擎在 STA 线程被调用，跳过 MTA 初始化。";
+        return;
+    }
     try
     {
         winrt::init_apartment(multiThreaded ? winrt::apartment_type::multi_threaded
@@ -282,6 +316,19 @@ OcrResult WindowsOcrEngine::recognize(const QImage& image, const QString& langua
     {
         result.errorMessage = QStringLiteral("待识别图像为空，无法识别。");
         result.elapsedMs = elapsedTimer.elapsed();
+        return result;
+    }
+
+    if (isGuiThread() || isStaApartment())
+    {
+        // 防御：Windows.Media.Ocr 需要多线程公寓 + 消息泵。
+        // - 在 STA 线程上 init_apartment(multi_threaded) 会触发 Debug CRT 断言；
+        // - 在 GUI 线程上阻塞等待 IAsyncOperation 会死锁。
+        // 正常路径由 OcrService 在 worker 线程调用，这里只兜底防崩/防卡死。
+        result.errorMessage = QStringLiteral(
+            "文字识别需要在后台线程执行（当前线程为 UI 线程），请重新发起识别。");
+        result.elapsedMs = elapsedTimer.elapsed();
+        qCWarning(lcOcr) << "recognize() 被 GUI/STA 线程调用，已拒绝以避免 WinRT 断言或死锁。";
         return result;
     }
 
