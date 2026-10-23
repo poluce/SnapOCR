@@ -4,14 +4,20 @@ Windows 10/11 上的轻量**截图 + 标注 + OCR**工具（开发中）。
 
 SnapOCR 的目标是“快捷、顺手、离线”：按下热键冻结屏幕、框选区域，随即画框/箭头/画笔/文字/马赛克，或一键提取图中文字，复制、保存、贴图都在悬浮工具条上完成。所有能力本地运行，默认不联网、不上传、不需要管理员权限。
 
-[![Build](https://github.com/poluce/SnapOCR/actions/workflows/build.yml/badge.svg)](https://github.com/poluce/SnapOCR/actions/workflows/build.yml)
+[[![Build](https://github.com/poluce/SnapOCR/actions/workflows/build.yml/badge.svg)](https://github.com/poluce/SnapOCR/actions/workflows/build.yml)
+
+## 功能预览
+
+| 主窗口 | 标注编辑 + 工具条 | OCR 结果窗 |
+|--------|-------------------|-----------|
+| ![主窗口](docs/assets/phase1-main.png) | ![标注](docs/assets/phase1-editor.png) | ![OCR](docs/assets/phase1-ocr.png) |
 
 ## 当前状态
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | 阶段 0 | 仓库、四份文档、可编译骨架、CI | ✅ 已完成 |
-| 阶段一 | 基本常用功能：截图/选区、基础标注、OCR 取字、热键/托盘/设置基础 | ⏳ 下一阶段 |
+| 阶段一 | 基本常用功能：截图/选区、基础标注、OCR 取字、热键/托盘/设置基础 | ✅ 已完成 |
 | 阶段二 | 适当添加功能：贴图、历史、放大镜/取色、延时、长截图、RapidOCR、高级标注 | 规划中 |
 | 阶段三 | 完善阶段一/二并发布：兼容性、性能、稳定性、缺陷修复、打包/签名 | 规划中 |
 
@@ -58,6 +64,9 @@ scripts\build.bat Release --no-tests
 
 :: 启动 GUI（Qt 运行库自动加入 PATH）
 scripts\run.bat
+
+:: 端到端验证（需交互式桌面，会注入键鼠）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\e2e-smoke.ps1 -BuildDir build
 
 :: CLI 自检
 build\SnapOCR.exe --version

@@ -5,11 +5,34 @@
 #include <memory>
 
 #include <QApplication>
+#include <QLoggingCategory>
+#include <QDebug>
+#include <QClipboard>
+#include <QDir>
 #include <QGuiApplication>
+#include <QScreen>
+#include <QMessageBox>
+#include <QStandardPaths>
 #include <QTextStream>
 
+#include "app/HotkeyManager.h"
+#include "app/ImageSaver.h"
+#include "app/SingleInstance.h"
+#include "app/TrayController.h"
+#include "capture/CaptureService.h"
+#include "common/Logging.h"
+#include "common/Settings.h"
+#include "ocr/OcrService.h"
+#include "ocr/WindowsOcrEngine.h"
+#include "overlay/OverlayController.h"
+#include "platform/win32/Clipboard.h"
+#include "platform/win32/Startup.h"
+#include "platform/win32/WindowActivation.h"
 #include "snapocr/Version.h"
 #include "ui/MainWindow.h"
+#include "ui/OcrResultDialog.h"
+#include "ui/SettingsDialog.h"
+#include "ui/Theme.h"
 
 namespace snapocr::app {
 namespace {
@@ -17,11 +40,15 @@ namespace {
 constexpr auto kFlagHelp = "--help";
 constexpr auto kFlagVersion = "--version";
 constexpr auto kFlagSmokeTest = "--smoke-test";
+constexpr auto kFlagCaptureSelfTest = "--capture-selftest";
+
+Q_LOGGING_CATEGORY(lcApp, "snapocr.app")
 
 void printLine(const QString& text)
 {
     QTextStream stream(stdout);
     stream << text << Qt::endl;
+    stream.flush();
 }
 
 }  // namespace
@@ -48,10 +75,417 @@ int Application::run(const QStringList& arguments)
     if (args.contains(QString::fromLatin1(kFlagSmokeTest))) {
         return runSmokeTest();
     }
+    if (args.contains(QString::fromLatin1(kFlagCaptureSelfTest))) {
+        return runCaptureSelfTest();
+    }
+
+    if (!initializeServices()) {
+        // 已有实例在运行：命令已转发，本次启动直接退出。
+        return EXIT_SUCCESS;
+    }
+
+    const bool startHidden = args.contains(QStringLiteral("--tray"));
+    if (!startHidden || m_tray == nullptr || !m_tray->isAvailable()) {
+        showMainWindow();
+    }
+
+    return QApplication::exec();
+}
+
+bool Application::initializeServices()
+{
+    if (m_initialized) {
+        return true;
+    }
+    m_initialized = true;
+
+    QApplication::setQuitOnLastWindowClosed(false);
+    QApplication::setWindowIcon(QIcon());
+    QGuiApplication::setApplicationDisplayName(QString::fromUtf8(snapocr::version::kAppName));
+
+    m_settingsStore = std::make_unique<common::SettingsStore>();
+    QString warning;
+    m_settings = m_settingsStore->load(&warning);
+
+    common::installLogging(m_settings.logLevel.isEmpty() ? common::defaultLogDirectory()
+                                                         : common::defaultLogDirectory(),
+                           m_settings.logLevel);
+    ui::applyTheme(m_settings.theme);
+
+    if (!warning.isEmpty()) {
+        qWarning("设置读取：%s", qUtf8Printable(warning));
+    }
+
+    // 单实例：已有实例时把命令转发过去并退出。
+    m_singleInstance = new SingleInstance(this);
+    QString instanceError;
+    const bool primary = m_singleInstance->tryBecomePrimary(&instanceError);
+    if (!instanceError.isEmpty()) {
+        qWarning("单实例：%s", qUtf8Printable(instanceError));
+    }
+    if (!primary) {
+        m_singleInstance->sendToPrimary(QStringLiteral("show"));
+        return false;
+    }
+    connect(m_singleInstance, &SingleInstance::commandReceived, this,
+            [this](const QString& command) {
+                if (command == QLatin1String("capture")) {
+                    startCapture();
+                } else if (command == QLatin1String("ocr")) {
+                    startOcrCapture();
+                } else {
+                    showMainWindow();
+                }
+            });
+
+    m_tray = new TrayController(this);
+    connect(m_tray, &TrayController::captureRequested, this, &Application::startCapture);
+    connect(m_tray, &TrayController::ocrRequested, this, &Application::startOcrCapture);
+    connect(m_tray, &TrayController::settingsRequested, this, &Application::showSettings);
+    connect(m_tray, &TrayController::showMainRequested, this, &Application::showMainWindow);
+    connect(m_tray, &TrayController::quitRequested, this, &Application::quitApplication);
+    m_tray->show();
+
+    m_overlayController = new overlay::OverlayController(this);
+    connect(m_overlayController, &overlay::OverlayController::copyRequested, this,
+            &Application::onCopyRequested);
+    connect(m_overlayController, &overlay::OverlayController::saveRequested, this,
+            &Application::onSaveRequested);
+    connect(m_overlayController, &overlay::OverlayController::ocrRequested, this,
+            &Application::runOcr);
+    connect(m_overlayController, &overlay::OverlayController::errorOccurred, this,
+            &Application::onCaptureError);
+    connect(m_overlayController, &overlay::OverlayController::finished, this, [this]() {
+        if (m_mainWindow != nullptr) {
+            m_mainWindow->setStatusText(QStringLiteral("就绪"));
+        }
+    });
+
+    m_ocrService = new ocr::OcrService(this);
+    m_ocrService->setEngine(std::make_unique<ocr::WindowsOcrEngine>());
+    connect(m_ocrService, &ocr::OcrService::finished, this, &Application::onOcrFinished);
+
+    m_hotkeys = new HotkeyManager(this);
+    connect(m_hotkeys, &HotkeyManager::captureRequested, this, &Application::startCapture);
+    connect(m_hotkeys, &HotkeyManager::ocrRequested, this, &Application::startOcrCapture);
+    applyHotkeys();
+
+    // 设置里的开机自启状态与注册表对齐（失败只记录，不阻塞启动）。
+    QString startupError;
+    platform::win32::setAutoStartEnabled(m_settings.startWithWindows, &startupError);
+    if (!startupError.isEmpty()) {
+        qWarning("开机自启：%s", qUtf8Printable(startupError));
+    }
 
     m_mainWindow = std::make_unique<ui::MainWindow>();
+    connect(m_mainWindow.get(), &ui::MainWindow::captureRequested, this,
+            &Application::startCapture);
+    connect(m_mainWindow.get(), &ui::MainWindow::ocrRequested, this, &Application::startOcrCapture);
+    connect(m_mainWindow.get(), &ui::MainWindow::settingsRequested, this,
+            &Application::showSettings);
+    updateHotkeyLabels();
+
+    annotate::AnnotationStyle initialStyle;
+    initialStyle.color = m_settings.lastColor;
+    initialStyle.width = m_settings.lastWidth;
+    initialStyle.fontSize = m_settings.lastFontSize;
+    m_overlayController->setAnnotationStyle(initialStyle);
+
+    return true;
+}
+
+void Application::applyHotkeys()
+{
+    if (m_hotkeys == nullptr) {
+        return;
+    }
+
+    QString captureError;
+    const bool captureOk = m_hotkeys->registerHotkey(HotkeyManager::Action::Capture,
+                                                     m_settings.captureHotkey, &captureError);
+    qInfo("registration capture=%s seq=%s err=%s", captureOk ? "ok" : "FAILED",
+          qUtf8Printable(m_settings.captureHotkey), qUtf8Printable(captureError));
+    if (!captureOk) {
+        // 回退到默认 F1，仍失败则提示用户去设置里改。
+        const bool fallback = m_hotkeys->registerHotkey(HotkeyManager::Action::Capture,
+                                                        QStringLiteral("F1"), nullptr);
+        showError(fallback
+                      ? QStringLiteral("%1，已临时改用 F1。可在设置中更换截图热键。").arg(captureError)
+                      : QStringLiteral("%1，且默认 F1 也不可用。请在设置中更换截图热键。")
+                            .arg(captureError));
+    }
+
+    QString ocrError;
+    const bool ocrOk =
+        m_hotkeys->registerHotkey(HotkeyManager::Action::Ocr, m_settings.ocrHotkey, &ocrError);
+    qInfo("registration ocr=%s seq=%s err=%s", ocrOk ? "ok" : "FAILED",
+          qUtf8Printable(m_settings.ocrHotkey), qUtf8Printable(ocrError));
+    if (!ocrOk) {
+        const bool fallback =
+            m_hotkeys->registerHotkey(HotkeyManager::Action::Ocr, QStringLiteral("F4"), nullptr);
+        showError(fallback
+                      ? QStringLiteral("%1，已临时改用 F4。可在设置中更换取字热键。").arg(ocrError)
+                      : QStringLiteral("%1，且默认 F4 也不可用。请在设置中更换取字热键。")
+                            .arg(ocrError));
+    }
+
+    updateHotkeyLabels();
+}
+
+void Application::updateHotkeyLabels()
+{
+    const QString captureText = m_hotkeys != nullptr
+                                    ? m_hotkeys->registeredText(HotkeyManager::Action::Capture)
+                                    : QStringLiteral("F1");
+    const QString ocrText = m_hotkeys != nullptr
+                                ? m_hotkeys->registeredText(HotkeyManager::Action::Ocr)
+                                : QStringLiteral("F4");
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setHotkeyTexts(captureText, ocrText);
+    }
+    if (m_tray != nullptr) {
+        m_tray->setHotkeyTexts(captureText, ocrText);
+    }
+}
+
+void Application::startCapture()
+{
+    qCDebug(lcApp, "startCapture requested");
+    if (m_overlayController == nullptr || m_overlayController->isActive()) {
+        return;
+    }
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setStatusText(QStringLiteral("截图：拖拽选择区域"));
+    }
+    m_overlayController->beginCapture();
+}
+
+void Application::startOcrCapture()
+{
+    qCDebug(lcApp, "startOcrCapture requested");
+    if (m_overlayController == nullptr || m_overlayController->isActive()) {
+        return;
+    }
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setStatusText(QStringLiteral("取字：拖拽选择要识别的区域"));
+    }
+    m_overlayController->beginOcrCapture();
+}
+
+void Application::onCopyRequested(const QImage& image)
+{
+    QString error;
+    if (platform::win32::copyImageToClipboard(image, &error)) {
+        showInfo(QStringLiteral("已复制到剪贴板（%1 × %2）").arg(image.width()).arg(image.height()));
+    } else {
+        showError(QStringLiteral("复制失败：%1").arg(error));
+    }
+}
+
+void Application::onSaveRequested(const QImage& image)
+{
+    QString savedPath;
+    QString error;
+    if (ImageSaver::save(image, m_settings, &savedPath, &error)) {
+        showInfo(QStringLiteral("已保存：%1").arg(QDir::toNativeSeparators(savedPath)));
+    } else {
+        showError(QStringLiteral("保存失败：%1").arg(error));
+    }
+}
+
+void Application::onCaptureError(const QString& message)
+{
+    showError(message);
+}
+
+void Application::runOcr(const QImage& image)
+{
+    if (image.isNull()) {
+        showError(QStringLiteral("没有可识别的图像"));
+        return;
+    }
+
+    m_lastOcrImage = image;
+
+    ui::OcrResultDialog* dialog = ensureOcrDialog();
+    dialog->setBusy(QStringLiteral("正在识别…（离线本地识别）"));
+    dialog->show();
+    dialog->raise();
+    dialog->activateWindow();
+
+    if (m_ocrService == nullptr) {
+        return;
+    }
+    if (m_ocrService->isBusy()) {
+        dialog->setResult(ocr::OcrResult{.ok = false,
+                                         .errorMessage = QStringLiteral("上一次识别还没结束，请稍候")});
+        return;
+    }
+    m_ocrService->recognizeAsync(image, m_settings.ocrLanguage);
+}
+
+ui::OcrResultDialog* Application::ensureOcrDialog()
+{
+    if (m_ocrDialog != nullptr) {
+        return m_ocrDialog;
+    }
+
+    auto* dialog = new ui::OcrResultDialog(m_mainWindow.get());
+    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    connect(dialog, &ui::OcrResultDialog::copyRequested, this, [this](const QString&) {
+        showInfo(QStringLiteral("识别文本已复制到剪贴板"));
+    });
+    connect(dialog, &ui::OcrResultDialog::retryRequested, this, [this, dialog]() {
+        if (!m_lastOcrImage.isNull()) {
+            const QImage image = m_lastOcrImage;
+            dialog->setBusy(QStringLiteral("正在重新识别…"));
+            m_ocrService->recognizeAsync(image, m_settings.ocrLanguage);
+        }
+    });
+    m_ocrDialog = dialog;
+    return dialog;
+}
+
+void Application::onOcrFinished(const ocr::OcrResult& result)
+{
+    ui::OcrResultDialog* dialog = ensureOcrDialog();
+    dialog->setResult(result);
+    dialog->show();
+    dialog->raise();
+
+    if (!result.ok) {
+        showError(QStringLiteral("文字识别失败：%1").arg(result.errorMessage));
+        return;
+    }
+
+    const QString text = result.fullText.trimmed();
+    if (text.isEmpty()) {
+        showInfo(QStringLiteral("未识别到文字，可重新框选更大区域再试"));
+        return;
+    }
+
+    if (m_settings.ocrAutoCopy) {
+        QApplication::clipboard()->setText(result.fullText);
+        showInfo(QStringLiteral("已识别 %1 行文字并复制到剪贴板（%2ms）")
+                     .arg(result.lines.size())
+                     .arg(result.elapsedMs));
+    } else {
+        showInfo(QStringLiteral("已识别 %1 行文字（%2ms）")
+                     .arg(result.lines.size())
+                     .arg(result.elapsedMs));
+    }
+}
+
+void Application::showMainWindow()
+{
+    if (m_mainWindow == nullptr) {
+        return;
+    }
     m_mainWindow->show();
-    return QApplication::exec();
+    m_mainWindow->raise();
+    m_mainWindow->activateWindow();
+    // 从后台/托盘唤起时，系统前台锁可能不让窗口到最前，强制一次。
+    platform::win32::forceForegroundWindow(m_mainWindow.get());
+}
+
+void Application::showSettings()
+{
+    const common::AppSettings previous = m_settings;
+    ui::SettingsDialog dialog(m_settings, m_mainWindow.get());
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    m_settings = dialog.settings();
+
+    // 热键变更：重新注册，失败时回滚到旧值。
+    if (m_settings.captureHotkey != previous.captureHotkey
+        || m_settings.ocrHotkey != previous.ocrHotkey) {
+        QString error;
+        if (!m_hotkeys->registerHotkey(HotkeyManager::Action::Capture, m_settings.captureHotkey,
+                                       &error)) {
+            showError(error);
+            m_settings.captureHotkey = previous.captureHotkey;
+        }
+        if (!m_hotkeys->registerHotkey(HotkeyManager::Action::Ocr, m_settings.ocrHotkey, &error)) {
+            showError(error);
+            m_settings.ocrHotkey = previous.ocrHotkey;
+        }
+        // 保证两套热键最终都处于已注册状态。
+        m_hotkeys->registerHotkey(HotkeyManager::Action::Capture, m_settings.captureHotkey, nullptr);
+        m_hotkeys->registerHotkey(HotkeyManager::Action::Ocr, m_settings.ocrHotkey, nullptr);
+        updateHotkeyLabels();
+    }
+
+    if (m_settings.theme != previous.theme) {
+        ui::applyTheme(m_settings.theme);
+    }
+
+    if (m_settings.startWithWindows != previous.startWithWindows) {
+        QString error;
+        if (!platform::win32::setAutoStartEnabled(m_settings.startWithWindows, &error)) {
+            showError(error);
+        }
+    }
+
+    if (m_settings.logLevel != previous.logLevel) {
+        common::installLogging(common::defaultLogDirectory(), m_settings.logLevel);
+    }
+
+    annotate::AnnotationStyle style;
+    style.color = m_settings.lastColor;
+    style.width = m_settings.lastWidth;
+    style.fontSize = m_settings.lastFontSize;
+    m_overlayController->setAnnotationStyle(style);
+
+    persistSettings();
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setStatusText(QStringLiteral("设置已保存"));
+    }
+}
+
+void Application::persistSettings()
+{
+    if (m_settingsStore == nullptr) {
+        return;
+    }
+    QString error;
+    if (!m_settingsStore->save(m_settings, &error)) {
+        showError(QStringLiteral("设置保存失败：%1").arg(error));
+    }
+}
+
+void Application::quitApplication()
+{
+    persistSettings();
+    if (m_hotkeys != nullptr) {
+        m_hotkeys->unregisterAll();
+    }
+    if (m_tray != nullptr) {
+        m_tray->hide();
+    }
+    QApplication::quit();
+}
+
+void Application::showInfo(const QString& message)
+{
+    if (m_tray != nullptr && m_tray->isAvailable()) {
+        m_tray->showMessage(QStringLiteral("SnapOCR"), message);
+    }
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setStatusText(message);
+    }
+}
+
+void Application::showError(const QString& message)
+{
+    if (m_tray != nullptr && m_tray->isAvailable()) {
+        m_tray->showMessage(QStringLiteral("SnapOCR"), message, true);
+    }
+    qWarning("%s", qUtf8Printable(message));
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setStatusText(message);
+    }
 }
 
 int Application::runSmokeTest()
@@ -63,19 +497,61 @@ int Application::runSmokeTest()
     const QString platformName = QGuiApplication::platformName();
     out << "  platform: " << platformName << '\n';
     if (platformName.isEmpty()) {
-        out << "FAIL: Qt 平台插件未加载" << '\n';
+        out << "FAIL: Qt 平台插件未加载\n";
         out.flush();
         return EXIT_FAILURE;
     }
 
-    // 创建一次主窗口，验证 Qt Widgets 初始化链路（不进入事件循环、不显示）。
     const ui::MainWindow window;
     if (window.windowTitle().isEmpty()) {
-        out << "FAIL: 主窗口初始化失败" << '\n';
+        out << "FAIL: 主窗口初始化失败\n";
+        out.flush();
+        return EXIT_FAILURE;
+    }
+    out << "  window  : " << window.windowTitle() << '\n';
+    out << "PASS\n";
+    out.flush();
+    return EXIT_SUCCESS;
+}
+
+int Application::runCaptureSelfTest()
+{
+    QTextStream out(stdout);
+    out << "SnapOCR capture self test\n";
+    out << "  platform: " << QGuiApplication::platformName() << '\n';
+
+    out << "  qt screens:" << '\n';
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        out << "    - name=" << screen->name() << " geom=" << screen->geometry().width() << 'x'
+            << screen->geometry().height() << " at (" << screen->geometry().x() << ','
+            << screen->geometry().y() << ") dpr=" << screen->devicePixelRatio()
+            << " logicalDpi=" << screen->logicalDotsPerInch() << '\n';
+    }
+
+    capture::CaptureService service;
+    capture::CaptureResult captured;
+    QString error;
+    QObject::connect(&service, &capture::CaptureService::captured,
+                     [&captured](const capture::CaptureResult& result) { captured = result; });
+    QObject::connect(&service, &capture::CaptureService::failed,
+                     [&error](const QString& message) { error = message; });
+    service.captureAllScreens();
+
+    if (!captured.isValid()) {
+        out << "FAIL: " << (error.isEmpty() ? QStringLiteral("捕获失败") : error) << '\n';
         out.flush();
         return EXIT_FAILURE;
     }
 
+    out << "  screens : " << captured.screens.size() << '\n';
+    for (const capture::ScreenFrame& frame : captured.screens) {
+        out << "    - " << frame.monitor.id << " phys=" << frame.monitor.physicalGeometry.width()
+            << 'x' << frame.monitor.physicalGeometry.height()
+            << " dpr=" << frame.monitor.devicePixelRatio << " image=" << frame.image.width() << 'x'
+            << frame.image.height() << '\n';
+    }
+    out << "  virtual : " << captured.virtualGeometry.width() << 'x'
+        << captured.virtualGeometry.height() << '\n';
     out << "PASS\n";
     out.flush();
     return EXIT_SUCCESS;
@@ -95,9 +571,11 @@ void Application::printHelp() const
                        QString::fromUtf8(snapocr::version::kVersion)));
     printLine(QStringLiteral("用法: SnapOCR.exe [选项]"));
     printLine(QStringLiteral("选项:"));
-    printLine(QStringLiteral("  -h, --help       显示帮助"));
-    printLine(QStringLiteral("  -v, --version    显示版本"));
-    printLine(QStringLiteral("  --smoke-test     启动自检（CI / 构建验证用）"));
+    printLine(QStringLiteral("  -h, --help            显示帮助"));
+    printLine(QStringLiteral("  -v, --version         显示版本"));
+    printLine(QStringLiteral("  --tray                启动后仅驻留托盘"));
+    printLine(QStringLiteral("  --smoke-test          启动自检（CI / 构建验证用）"));
+    printLine(QStringLiteral("  --capture-selftest    屏幕捕获自检（诊断用）"));
 }
 
 }  // namespace snapocr::app

@@ -1,18 +1,36 @@
 #pragma once
 
+#include <QImage>
 #include <QObject>
+#include <QPointer>
+#include <QString>
 #include <QStringList>
 
 #include <memory>
 
+#include "common/Settings.h"
+#include "ocr/OcrTypes.h"
+
 namespace snapocr::ui {
 class MainWindow;
+class OcrResultDialog;
+}
+
+namespace snapocr::overlay {
+class OverlayController;
+}
+
+namespace snapocr::ocr {
+class OcrService;
 }
 
 namespace snapocr::app {
 
-// 应用控制器：解析命令行、组织主窗口与后续的托盘/热键/服务装配。
-// 生命周期内不拥有 QApplication；由 main() 创建并传入参数。
+class HotkeyManager;
+class SingleInstance;
+class TrayController;
+
+// 应用控制器：解析命令行、装配托盘/热键/单实例/截图流程，连接输出动作。
 class Application final : public QObject
 {
     Q_OBJECT
@@ -26,10 +44,45 @@ public:
 
 private:
     int runSmokeTest();
+    int runCaptureSelfTest();
     void printVersion() const;
     void printHelp() const;
 
+    bool initializeServices();
+    void applyHotkeys();
+    void updateHotkeyLabels();
+
+    void startCapture();
+    void startOcrCapture();
+    void onCopyRequested(const QImage& image);
+    void onSaveRequested(const QImage& image);
+    void onCaptureError(const QString& message);
+
+    void runOcr(const QImage& image);
+    void onOcrFinished(const snapocr::ocr::OcrResult& result);
+    ui::OcrResultDialog* ensureOcrDialog();
+
+    void showMainWindow();
+    void showSettings();
+    void quitApplication();
+
+    void showInfo(const QString& message);
+    void showError(const QString& message);
+    void persistSettings();
+
+    std::unique_ptr<common::SettingsStore> m_settingsStore;
+    common::AppSettings m_settings;
+
+    HotkeyManager* m_hotkeys = nullptr;
+    TrayController* m_tray = nullptr;
+    SingleInstance* m_singleInstance = nullptr;
+    overlay::OverlayController* m_overlayController = nullptr;
+    ocr::OcrService* m_ocrService = nullptr;
+
     std::unique_ptr<ui::MainWindow> m_mainWindow;
+    QPointer<ui::OcrResultDialog> m_ocrDialog;
+    QImage m_lastOcrImage;
+    bool m_initialized = false;
 };
 
 }  // namespace snapocr::app

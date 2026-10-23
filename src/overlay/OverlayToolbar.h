@@ -1,0 +1,56 @@
+#pragma once
+
+#include <QColor>
+#include <QWidget>
+
+#include "annotate/AnnotationTypes.h"
+
+class QToolButton;
+
+namespace snapocr::overlay {
+
+// 截图工具条：选区确认后浮在选区旁。
+// 选择模式：取字 / 保存 / 复制 / 取消；点击任一标注工具进入编辑模式。
+class OverlayToolbar final : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit OverlayToolbar(QWidget* parent = nullptr);
+
+    void setEditingMode(bool editing);
+    void setCurrentTool(annotate::AnnotationKind kind);
+    void setCurrentColor(const QColor& color);
+    void setCurrentWidth(int width);
+    bool isEditingMode() const { return m_editing; }
+
+    // 定位到选区附近（物理像素矩形 + 全局逻辑矩形）。
+    void positionNear(const QRect& physicalSelection, const QRect& globalLogicalSelection,
+                      const QRect& virtualLogicalDesktop);
+
+signals:
+    void toolSelected(snapocr::annotate::AnnotationKind kind);
+    void selectToolSelected();
+    void copyRequested();
+    void saveRequested();
+    void ocrRequested();
+    void cancelRequested();
+    void undoRequested();
+    void redoRequested();
+    void colorChangeRequested(const QColor& color);
+    void widthChangeRequested(int width);
+
+private:
+    void applyStyleSheet();
+
+    QWidget* m_toolGroup = nullptr;
+    QWidget* m_styleGroup = nullptr;
+    QWidget* m_undoGroup = nullptr;
+    QToolButton* m_colorButton = nullptr;
+    QToolButton* m_widthButton = nullptr;
+    QVector<QToolButton*> m_toolButtons;
+    bool m_editing = false;
+    int m_toolbarWidth = 0;
+};
+
+}  // namespace snapocr::overlay

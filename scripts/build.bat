@@ -8,7 +8,7 @@ rem
 rem Environment:
 rem   QTDIR  Qt msvc2022_64 directory, default E:\Qt6\6.11.1\msvc2022_64
 rem ===========================================================================
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
 set "REPO_ROOT=%~dp0.."
 pushd "%REPO_ROOT%" >nul
@@ -61,6 +61,10 @@ if errorlevel 1 (
     set "PATH=%QTDIR%\..\..\Tools\Ninja;%PATH%"
 )
 
+rem ---- 构建目录（并行开发时各 Agent 用独立目录，避免 ninja 锁冲突） ----
+if not defined SNAPCOR_BUILD_DIR set "SNAPCOR_BUILD_DIR=build"
+set "BUILD_PATH=%REPO_ROOT%\%SNAPCOR_BUILD_DIR%"
+
 rem ---- arguments ----
 set "CONFIG=Debug"
 set "RUN_TESTS=1"
@@ -72,23 +76,35 @@ if /i "%~1"=="--no-tests" set "RUN_TESTS=0"
 
 set "PATH=%QTDIR%\bin;%PATH%"
 
-echo [INFO] Configure: config=%CONFIG% qt=%QTDIR%
-"%CMAKE_EXE%" -S "%REPO_ROOT%" -B "%REPO_ROOT%\build" -G Ninja ^
+echo [INFO] Configure: config=%CONFIG% qt=%QTDIR% dir=%BUILD_PATH%
+"%CMAKE_EXE%" -S "%REPO_ROOT%" -B "%BUILD_PATH%" -G Ninja ^
     -DCMAKE_BUILD_TYPE=%CONFIG% ^
     -DCMAKE_PREFIX_PATH="%QTDIR%"
-if errorlevel 1 goto :fail
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+    echo [ERROR] Configure failed with exit code %RC%.
+    goto :fail
+)
 
 echo [INFO] Build
-"%CMAKE_EXE%" --build "%REPO_ROOT%\build"
-if errorlevel 1 goto :fail
+"%CMAKE_EXE%" --build "%BUILD_PATH%"
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+    echo [ERROR] Build failed with exit code %RC%.
+    goto :fail
+)
 
 if "%RUN_TESTS%"=="1" (
     echo [INFO] Test
-    ctest --test-dir "%REPO_ROOT%\build" --output-on-failure
-    if errorlevel 1 goto :fail
+    ctest --test-dir "%BUILD_PATH%" --output-on-failure
+    set "RC=!ERRORLEVEL!"
+    if not "!RC!"=="0" (
+        echo [ERROR] Tests failed with exit code !RC!.
+        goto :fail
+    )
 )
 
-echo [OK] Build finished: %REPO_ROOT%\build\SnapOCR.exe
+echo [OK] Build finished: %BUILD_PATH%\SnapOCR.exe
 popd >nul
 exit /b 0
 

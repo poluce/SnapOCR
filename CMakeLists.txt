@@ -57,15 +57,15 @@ function(snapocr_set_common_options target)
     endif()
 endfunction()
 
-# 业务核心静态库：UI 壳、可复用逻辑、平台封装均放这里，便于单测直接链接
-add_library(snapocr_core STATIC
-    src/app/Application.cpp
-    src/app/Application.h
-    src/ui/MainWindow.cpp
-    src/ui/MainWindow.h
-    src/platform/win32/Console.cpp
-    src/platform/win32/Console.h
+# 源文件自动收集：新增 .cpp 无需改 CMakeLists（Ninja 会在下一次构建时重新配置）。
+# 约定：src/ 下除 main.cpp 外全部属于 snapocr_core；新增模块直接放对应子目录即可。
+file(GLOB_RECURSE SNAPCORE_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
+list(REMOVE_ITEM SNAPCORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
+add_library(snapocr_core STATIC ${SNAPCORE_SOURCES})
 
 target_include_directories(snapocr_core
     PUBLIC
@@ -81,6 +81,11 @@ target_link_libraries(snapocr_core
         Qt6::Network
         Qt6::Concurrent
 )
+
+if(WIN32)
+    # C++/WinRT（Windows.Media.Ocr）与系统 API
+    target_link_libraries(snapocr_core PUBLIC windowsapp)
+endif()
 
 snapocr_set_common_options(snapocr_core)
 

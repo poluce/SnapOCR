@@ -1,17 +1,20 @@
-add_executable(snapocr_tests
-    test_version.cpp
-)
+# 每个测试文件独立成可执行文件（QTEST_GUILESS_MAIN 会定义 main，不能多个文件链到一起）。
+# 约定：新增 tests/test_*.cpp 自动注册为测试目标，无需改本文件。
+function(snapocr_add_test name)
+    add_executable(${name} ${ARGN})
+    target_link_libraries(${name} PRIVATE snapocr_core Qt6::Test)
+    snapocr_set_common_options(${name})
+    add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endfunction()
 
-target_link_libraries(snapocr_tests PRIVATE
-    snapocr_core
-    Qt6::Test
-)
+file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp")
 
-snapocr_set_common_options(snapocr_tests)
+foreach(test_source IN LISTS TEST_SOURCES)
+    get_filename_component(test_name "${test_source}" NAME_WE)
+    snapocr_add_test(${test_name} "${test_source}")
+endforeach()
 
-add_test(NAME snapocr_tests COMMAND snapocr_tests)
+# 冒烟测试：真实启动一次应用（offscreen 平台，CI 无桌面也能跑）
 add_test(NAME snapocr_smoke COMMAND SnapOCR --smoke-test)
-
-# 单元测试使用 QTEST_GUILESS_MAIN；冒烟测试在 CI/无桌面环境用 offscreen 平台
-set_tests_properties(snapocr_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 set_tests_properties(snapocr_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
