@@ -11,6 +11,10 @@ namespace snapocr::ui {
 namespace {
 
 constexpr int kIconSize = 20;
+// 超采样倍数：图标按 4 倍物理像素绘制并标记 devicePixelRatio，
+// 这样在 150%/200%/250% 等任何缩放下都由 Qt 平滑缩到目标尺寸，
+// 而不是把 20x20 的位图放大（会明显发虚）。
+constexpr int kSuperSample = 4;
 
 QColor g_inkColor = QColor(0x33, 0x33, 0x33);
 
@@ -21,14 +25,17 @@ QColor inkColor()
 
 QPixmap makePixmap()
 {
-    QPixmap pixmap(kIconSize, kIconSize);
+    QPixmap pixmap(kIconSize * kSuperSample, kIconSize * kSuperSample);
     pixmap.fill(Qt::transparent);
+    pixmap.setDevicePixelRatio(kSuperSample);
     return pixmap;
 }
 
 void configurePainter(QPainter& painter)
 {
     painter.setRenderHint(QPainter::Antialiasing, true);
+    // 坐标系仍按 20x20 的“逻辑图标空间”书写，这里统一放大到超采样分辨率。
+    painter.scale(kSuperSample, kSuperSample);
     QPen pen(inkColor());
     pen.setWidthF(1.6);
     pen.setCapStyle(Qt::RoundCap);

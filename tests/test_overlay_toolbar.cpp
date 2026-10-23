@@ -5,6 +5,7 @@
 
 #include "annotate/AnnotationTypes.h"
 #include "overlay/OverlayToolbar.h"
+#include "ui/ToolIcons.h"
 #include "overlay/ToolbarTooltip.h"
 
 #include <QHelpEvent>
@@ -85,6 +86,8 @@ void OverlayToolbarTest::hasAllActionButtons()
     QVERIFY(!toolbar.findChild<QToolButton*>(QStringLiteral("cancelButton"))->icon().isNull());
 }
 
+// 动作按钮的图标映射：复制必须是勾号（confirm），取消必须是叉号（close）。
+// 直接与 ToolIcons 生成的同参数图标逐像素比较，避免靠形状启发式判断。
 void OverlayToolbarTest::copyUsesCheckAndCancelUsesX()
 {
     OverlayToolbar toolbar;
@@ -93,34 +96,18 @@ void OverlayToolbarTest::copyUsesCheckAndCancelUsesX()
     QVERIFY(copy != nullptr);
     QVERIFY(cancel != nullptr);
 
-    const QImage checkImage = copy->icon().pixmap(20, 20).toImage();
-    const QImage crossImage = cancel->icon().pixmap(20, 20).toImage();
-    QVERIFY(!checkImage.isNull());
-    QVERIFY(!crossImage.isNull());
-    // 勾号与叉号是不同图形。
-    QVERIFY(checkImage != crossImage);
+    const QColor ink(0x2B, 0x2F, 0x36);  // 工具条浅色主题的图标颜色
+    const QSize size(20, 20);
+    const QImage copyImage = copy->icon().pixmap(size, 2.0).toImage();
+    const QImage cancelImage = cancel->icon().pixmap(size, 2.0).toImage();
+    const QImage confirmRef = ui::actionIcon(QStringLiteral("confirm"), ink).pixmap(size, 2.0).toImage();
+    const QImage closeRef = ui::actionIcon(QStringLiteral("close"), ink).pixmap(size, 2.0).toImage();
 
-    // 叉号：右上与左下象限都有像素（对角线交点特征），勾号只有左下/右上趋势。
-    auto inkCount = [](const QImage& image, int x0, int y0, int x1, int y1) {
-        int count = 0;
-        for (int y = y0; y < y1; ++y) {
-            for (int x = x0; x < x1; ++x) {
-                if (qAlpha(image.pixel(x, y)) > 40) {
-                    ++count;
-                }
-            }
-        }
-        return count;
-    };
-    const int w = crossImage.width();
-    const int h = crossImage.height();
-    // 叉号四个象限都应有笔画；勾号左上象限应当基本为空。
-    const int crossTopLeft = inkCount(crossImage, 0, 0, w / 2, h / 2);
-    const int crossTopRight = inkCount(crossImage, w / 2, 0, w, h / 2);
-    QVERIFY(crossTopLeft > 0);
-    QVERIFY(crossTopRight > 0);
-    const int checkTopLeft = inkCount(checkImage, 0, 0, w / 2, h / 2);
-    QVERIFY(checkTopLeft < crossTopLeft);
+    QVERIFY(!copyImage.isNull());
+    QVERIFY(!cancelImage.isNull());
+    QVERIFY2(copyImage == confirmRef, "copy button must use the check icon");
+    QVERIFY2(cancelImage == closeRef, "cancel button must use the X icon");
+    QVERIFY(copyImage != cancelImage);
 }
 
 // 选择模式：只有箭头按钮处于勾选态，绘图工具全部取消。

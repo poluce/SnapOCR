@@ -379,11 +379,16 @@ void OverlayToolbar::setCurrentTool(annotate::AnnotationKind kind)
 void OverlayToolbar::setCurrentColor(const QColor& color)
 {
     m_colorButton->setProperty("color", color);
-    QPixmap pixmap(18, 18);
+    // 色块同样按 4 倍绘制，避免高 DPI 下发虚。
+    constexpr int kColorSize = 18;
+    constexpr int kSuperSample = 4;
+    QPixmap pixmap(kColorSize * kSuperSample, kColorSize * kSuperSample);
     pixmap.fill(color);
+    pixmap.setDevicePixelRatio(kSuperSample);
     QPainter painter(&pixmap);
     painter.setPen(QPen(QColor(0x66, 0x6B, 0x73), 1));
-    painter.drawRect(0, 0, 17, 17);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(QRectF(0.5, 0.5, kColorSize - 1, kColorSize - 1));
     painter.end();
     m_colorButton->setIcon(QIcon(pixmap));
 }
