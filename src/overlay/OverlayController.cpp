@@ -267,6 +267,7 @@ void OverlayController::enterEditingMode(annotate::AnnotationKind kind)
 
     const QImage cropped = croppedSelection();
     if (cropped.isNull()) {
+
         emit errorOccurred(QStringLiteral("选区图像为空，无法进入标注"));
         return;
     }
@@ -291,16 +292,23 @@ void OverlayController::enterEditingMode(annotate::AnnotationKind kind)
     m_editor->activateWindow();
     m_editor->setTool(kind);
 
-    // 编辑态隐藏覆盖层：置顶编辑窗与置顶覆盖层同级，同时存在会互相遮挡并吃掉鼠标/键盘。
+    // 编辑态保留覆盖层：选区外的暗化背景必须继续显示（用户要求“标注时周围仍是灰的”）。
+    // 只把选区交互关掉（避免误拖动选区），并把编辑窗提到覆盖层之上。
     for (OverlayWindow* window : m_overlays) {
         window->setSelectionInteractive(false);
-        window->hide();
+        window->refresh();
     }
 
     showToolbar();
     m_toolbar->setEditingMode(true);
     m_toolbar->setCurrentTool(kind);
     placeToolbar();
+    // 覆盖层是置顶全屏窗口，编辑窗必须显式提到它们之上。
+    for (OverlayWindow* window : m_overlays) {
+        window->raise();
+    }
+    m_toolbar->raise();
+    m_editor->raise();
     // 延迟一拍再激活：此刻仍在工具条点击的事件处理中，立即 SetForegroundWindow 会被系统忽略，
     // 导致用户“第一次点击”被当作激活点击吞掉。
     QTimer::singleShot(0, m_editor, [this]() {
@@ -313,7 +321,12 @@ void OverlayController::enterEditingMode(annotate::AnnotationKind kind)
         } else {
             m_editor->setFocus();
         }
+        // 激活编辑窗会把它带到最前，但覆盖层/工具条也要保持正确层级。
+        for (OverlayWindow* window : m_overlays) {
+            window->raise();
+        }
         raiseToolbar();
+        m_editor->raise();
     });
 }
 
@@ -328,7 +341,6 @@ void OverlayController::exitEditingMode()
     for (OverlayWindow* window : m_overlays) {
         window->setSelectionInteractive(true);
         window->show();
-        window->raise();
         window->refresh();
     }
     if (m_toolbar != nullptr) {
