@@ -1,0 +1,26 @@
+# 默认按文本处理，仓库内统一 LF；Windows 脚本单独用 CRLF
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.sln text eol=crlf
+*.vcxproj* text eol=crlf
+*.rc text eol=crlf
+
+# 二进制资源
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary
+*.zip binary
+*.7z binary
+*.onnx binary
+*.bin binary
+*.ttf binary
+*.ttc binary
+*.qm binary
+*.dll binary
+*.lib binary
+*.exe binary

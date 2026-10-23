@@ -1,0 +1,14 @@
+// 本文件由 CMake 配置生成（cmake/Version.h.in），请勿手改。
+#pragma once
+
+namespace snapocr::version {
+
+inline constexpr const char* kAppName = "SnapOCR";
+inline constexpr const char* kVersion = "@PROJECT_VERSION@";
+inline constexpr const char* kOrganizationName = "poluce";
+
+// 单实例 / 本地套接字 / 配置键的稳定标识，发布后不要随意修改
+inline constexpr const char* kAppId = "SnapOCR";
+inline constexpr const char* kSingleInstanceKey = "SnapOCR.SingleInstance.1";
+
+}  // namespace snapocr::version

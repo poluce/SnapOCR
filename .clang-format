@@ -1,0 +1,37 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+# 基础排版：4 空格、100 列、Allman 大括号（贴近 Qt 风格）
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+NamespaceIndentation: None
+IndentCaseLabels: false
+AlignAfterOpenBracket: Align
+AlignOperands: true
+PointerAlignment: Left
+DerivePointerAlignment: false
+SortIncludes: CaseSensitive
+SortUsingDeclarations: false
+
+IncludeCategories:
+  - Regex: '^"'
+    Priority: 1
+  - Regex: '^<Q[A-Za-z]+'
+    Priority: 2
+  - Regex: '^<windows\.h>'
+    Priority: 3
+  - Regex: '^<'
+    Priority: 4
+...

@@ -1,0 +1,532 @@
+# 技术设计
+
+> 状态：M0 定稿（2026-10-23）。M1 起按本文件实现；契约变更必须先改本文件并补 ADR。
+> 需求背景见 [产品需求](01-product-requirements.md)，任务分解见 [路线图](03-roadmap.md)。
+
+## 1. 约束与已验证环境
+
+目标平台：Windows 10 1903+ / Windows 11，x64，**PerMonitorV2 DPI 感知**，无管理员权限。
+
+| 组件 | 版本 | 说明 |
+|------|------|------|
+| C++ | C++20 | `/utf-8`，中文直写源码 |
+| Qt | 6.11.1 `msvc2022_64` | Widgets / Core / Gui / Network / Concurrent / Test |
+| MSVC | 19.51（VS 18 Community，v145 工具集） | 已实测与 Qt 6.11.1 msvc2022 库编译/链接/运行正常 |
+| CMake | 3.30.5（Qt Tools） | 因 CMake 3.30 无 VS18 生成器，统一使用 **Ninja** |
+| Ninja | 1.12.1 | 单配置构建 |
+| Windows SDK | 10.0.26100 | 含 C++/WinRT 头文件 |
+| OCR | Windows OCR，`zh-Hans-CN` 已安装 | 实测识别 1 张中文界面截图耗时 59ms，准确率一般 |
+
+M0 验证结果：`scripts\build.bat Debug` 构建通过；`ctest` 2/2；`SnapOCR.exe --smoke-test` 在真实 `windows` 平台返回 0。
+
+## 2. 架构总览
+
+```mermaid
+graph TB
+    subgraph App[应用层 app]
+        A[Application<br/>命令行/装配/退出]
+        T[TrayController<br/>托盘菜单]
+        H[HotkeyManager<br/>全局热键]
+        SI[SingleInstance<br/>QLocalServer]
+    end
+    subgraph Product[产品流程]
+        C[CaptureService<br/>屏幕捕获]
+        O[OverlayController<br/>逐屏覆盖层 + 选区]
+        E[EditorController<br/>编辑态 + 工具条]
+        P[PinManager<br/>贴图 P1]
+        HIS[HistoryService<br/>历史 P1]
+    end
+    subgraph Model[模型/渲染]
+        AN[AnnotationDocument<br/>图元/撤销栈]
+        IMG[ImageExporter<br/>1:1 渲染/编码]
+    end
+    subgraph OCR[OCR 子系统]
+        OS[OcrService<br/>异步调度]
+        IE[IOcrEngine]
+        WIN[WindowsOcrEngine]
+        RAP[RapidOcrEngine P1]
+    end
+    subgraph Platform[平台层 platform/win32]
+        W1[ScreenCapture / Monitors]
+        W2[Hotkey / DPI / Clipboard / Startup]
+        W3[Console / Log]
+    end
+    subgraph UI[UI 层 ui]
+        SET[SettingsDialog]
+        RES[OcrResultDialog]
+        MAIN[MainWindow]
+        THEME[Theme/QSS]
+    end
+
+    A --> T & H & SI & C
+    C --> W1
+    C --> O
+    O --> E
+    E --> AN
+    E --> IMG
+    E --> OS
+    OS --> IE
+    IE --> WIN
+    IE --> RAP
+    E --> UI
+    T --> C & OS
+    UI --> SET & RES & MAIN & THEME
+```
+
+### 依赖规则（硬约束）
+
+1. `annotate` / `ocr` / `capture` 的**核心模型**不依赖具体窗口类，便于单测。
+2. **UI 不得直接调用 Win32 热键/捕获 API**；经 `platform/win32` 封装与 `CaptureService`。
+3. OCR 引擎由 `IOcrEngine` 抽象；业务层不得直接 `#include <winrt/...>`。
+4. 平台层不得依赖 `editor/overlay` 等产品流程（只提供能力）。
+5. 所有跨模块通信使用值类型（`CaptureResult`、`AnnotationDocument`、`OcrResult`）或信号，不传裸句柄。
+
+### 目标目录（M1–M5 逐步落地）
+
+| 路径 | 职责 | 阶段 |
+|------|------|------|
+| `src/main.cpp` | 入口：挂接控制台、QApplication、装配 | M0 ✅ |
+| `src/app/Application.*` | 命令行解析、主窗口/托盘装配、生命周期 | M0 ✅ / M4 扩展 |
+| `src/app/TrayController.*` | 托盘图标与菜单 | M4 |
+| `src/app/HotkeyManager.*` | 全局热键注册、冲突检测、WM_HOTKEY 分发 | M1 |
+| `src/app/SingleInstance.*` | QLocalServer/QLocalSocket 单实例与命令转发 | M4 |
+| `src/capture/*` | `MonitorLayout`、`CaptureService`、`CaptureResult` | M1 |
+| `src/overlay/*` | `OverlayWindow`（每屏）、`SelectionController`、`OverlayToolbar` | M1 |
+| `src/editor/*` | `EditorWindow`、`AnnotationCanvas`、`ToolController` | M2 |
+| `src/annotate/*` | `AnnotationDocument`、图元、撤销命令、命中测试、渲染 | M2 |
+| `src/ocr/*` | `IOcrEngine`、`WindowsOcrEngine`、`OcrService`、`OcrResult` | M3 / P1 |
+| `src/ui/*` | 设置、OCR 结果窗、历史、贴图、主题 | M2–M4 |
+| `src/platform/win32/*` | 捕获、热键、DPI、剪贴板、自启、控制台 | M1–M4 |
+| `src/common/*` | 设置 schema、日志、几何工具、版本 | M1–M4 |
+| `tests/*` | Qt Test 单测、黄金图像 | 持续 |
+| `tools/*` | 一次性诊断工具（OCR 探针等） | 按需 |
+
+## 3. 线程模型
+
+| 线程 | 职责 | 禁止 |
+|------|------|------|
+| UI 线程 | Qt 窗口、事件、选区交互、标注渲染 | 阻塞式捕获/OCR（>16ms 的操作必须异步） |
+| 捕获线程 | GDI `BitBlt` 多屏捕获（可复用线程池） | 触碰 QWidget；只在完成后回投结果 |
+| OCR worker | WinRT 调用、图像转换、结果组装 | 直接改 UI；直接回调业务状态 |
+| 日志线程/异步 | 文件写入可异步批量 | — |
+
+规则：
+
+- 捕获在热键触发后立即进入，目标 80ms 内完成（4K 双屏约 66MB 内存拷贝，需优化 DIB 方式）。
+- OCR 通过 `OcrService` 暴露异步 API（信号/Signal 或 `QFutureWatcher`），结果回 UI 线程。
+- WinRT 异步调用在 worker 线程内用阻塞等待；worker 内先 `winrt::init_apartment(apartment_type::multi_threaded)`。
+- 所有资源释放（GDI 对象、HWND、HANDLE）使用 RAII 封装，禁止泄漏。
+
+## 4. 坐标系统与 DPI
+
+**唯一权威坐标系：物理像素 + 虚拟桌面原点**（左上可为负）。UI 层使用 Qt 逻辑坐标，仅在边界处换算。
+
+```cpp
+// 物理坐标（权威）：覆盖全部显示器，主屏左上角不一定是 (0,0)
+struct PhysicalRect { int x; int y; int width; int height; };
+```
+
+换算规则：
+
+- 每块屏 `MonitorInfo.physicalGeometry`（物理像素）与 `devicePixelRatio`（Qt 逻辑/物理比例）一一对应；
+- Qt 逻辑坐标 → 物理：`physical = screen.physicalOrigin + (logical - screen.logicalOrigin) * dpr`（逐屏计算，禁止全桌面统一系数）；
+- 选区、图元、OCR 结果、导出全部使用物理坐标；工具条、光标提示等 UI 才用逻辑坐标；
+- 屏幕旋转：按 `DEVMODE.dmDisplayOrientation` 处理，捕获图先旋转到视觉正向再进入流程；
+- 显示器热插拔/分辨率变化：重新枚举并重建覆盖层，正在进行的截图直接取消并提示。
+
+**手测矩阵**（M1 出口）：单屏 100/125/150/200%；双屏同 DPI；双屏混合 DPI；主屏在右/下方（负坐标）；旋转屏（若条件允许）；RDP 环境。
+
+## 5. 屏幕捕获（CaptureService）
+
+### 5.1 方案
+
+**M1 采用 Win32 GDI 逐显示器捕获**（不用 `QScreen::grabWindow`，避免 DPR 二次缩放导致模糊/错位）：
+
+1. `EnumDisplayMonitors` + `GetMonitorInfoW` 枚举显示器与物理矩形；
+2. 每块屏 `GetDC(NULL)` / `CreateCompatibleDC` / `CreateDIBSection`（32bpp）→ `BitBlt(SRCCOPY | CAPTUREBLT)`；
+3. DIB 内存 → `QImage`（`Format_RGB32` 或 `ARGB32`，注意扫描行方向与 stride）；
+4. 记录 `CaptureResult{ screens[], virtualGeometry, capturedAtMs }`；
+5. 可选绘制鼠标光标（`GetCursorInfo` + `DrawIconEx`，P1）。
+
+### 5.2 关键点
+
+- `CAPTUREBLT` 用于捕获分层窗口（部分场景），代价略高；
+- 覆盖层创建前完成全部捕获，避免把自己截进去（F-CAP-09）；
+- 独占全屏 DirectX / DRM 受保护内容可能返回黑屏：检测纯黑 + 提示“当前画面不支持捕获”，不崩溃；
+- GDI 捕获失败（句柄/内存）→ 返回错误码与中文提示；
+- 4K×2 屏 ≈ 66MB `QImage` 内存，捕获后按屏保留，超时或取消立即释放；
+- 后续若需更高帧率/更高兼容性，可替换为 DXGI Desktop Duplication（ADR 记录触发条件）。
+
+### 5.3 对外接口（M1 定稿）
+
+```cpp
+namespace snapocr::capture {
+
+struct MonitorInfo {
+    QString id;
+    bool primary = false;
+    QRect physicalGeometry;   // 物理像素
+    qreal devicePixelRatio = 1.0;
+    int rotationDegrees = 0;
+};
+
+struct ScreenFrame {
+    MonitorInfo monitor;
+    QImage image;             // 物理像素，Format_RGB32
+};
+
+struct CaptureResult {
+    QVector<ScreenFrame> screens;
+    QRect virtualGeometry;    // 物理像素并集
+    qint64 capturedAtMs = 0;
+};
+
+class CaptureService final : public QObject
+{
+    Q_OBJECT
+public:
+    void captureAllScreens();          // 异步；结果经信号返回
+signals:
+    void captured(const CaptureResult& result);
+    void failed(const QString& message);
+};
+
+}  // namespace snapocr::capture
+```
+
+## 6. 覆盖层与选区（Overlay）
+
+### 6.1 结构
+
+- **每块显示器一个无边框置顶覆盖窗口**（`Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool`），
+  显示该屏冻结画面；单屏时即一个窗口。理由：混合 DPI 下避免跨屏单窗口被某一 DPR 整体缩放。
+- `OverlayController` 持有全部覆盖窗口 + 单一 `SelectionModel`（逻辑坐标/物理坐标双记录）。
+- 覆盖窗口打开时：
+  - 全屏显示冻结图（不缩放，按 1:1 设备像素绘制）；
+  - 选区外绘制半透明暗化遮罩；
+  - 选区边框、8 个控制点、尺寸/坐标 HUD；
+  - 光标改为十字；捕获鼠标后拖拽跨屏仍由起始窗口收到事件，坐标经全局换算。
+- 打开时隐藏 SnapOCR 其他可见窗口（托盘气泡等），退出时恢复。
+- 关闭顺序：先销毁窗口再释放图片，保证无残留（F-CAP-07）。
+
+### 6.2 交互状态机
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Selecting: 按下左键
+    Selecting --> Adjusting: 松开左键
+    Adjusting --> Adjusting: 拖动/控制点/键盘
+    Adjusting --> Selecting: 重新框选
+    Adjusting --> Confirmed: Enter / 双击
+    Adjusting --> Editing: 工具条标注 / 提取文字
+    Confirmed --> [*]: 复制/保存
+    Editing --> Confirmed: 完成
+    Idle --> Cancelled: Esc / 右键
+    Selecting --> Cancelled: Esc / 右键
+    Adjusting --> Cancelled: Esc / 右键
+    Cancelled --> [*]
+```
+
+### 6.3 工具条
+
+- 独立置顶小窗（不放在覆盖窗口内），定位在选区下方/上方，避免超出屏幕；
+- 按钮：标注工具（M2）、撤销/重做（M2）、OCR 取字、保存、复制、贴图（P1）、取消；
+- 工具条自身不参与截图（截图已完成）；主题跟随应用设置。
+
+### 6.4 性能
+
+- 覆盖窗口绘制用 `QPainter` 直接贴图 + 遮罩区域裁切，避免全屏 QPixmap 缩放；
+- 鼠标移动时只重绘受影响区域（`update(rect)`），保持 60fps 手感；
+- 目标：热键按下 → 首屏覆盖可见 ≤ 80ms（4K 双屏捕获约 20–40ms + 窗口创建）。
+
+## 7. 标注文档与编辑器（M2）
+
+### 7.1 数据模型
+
+```cpp
+namespace snapocr::annotate {
+
+enum class AnnotationKind {
+    Rectangle, Ellipse, Line, Arrow, Freehand, Text, StepNumber, Highlight, Mosaic
+};
+
+struct AnnotationStyle {
+    QColor color = Qt::red;
+    int width = 3;          // 描边宽度（物理像素）
+    int fontSize = 20;      // 文字字号（物理像素）
+    bool filled = false;
+};
+
+struct AnnotationItem {
+    AnnotationKind kind = AnnotationKind::Rectangle;
+    AnnotationStyle style;
+    QVector<QPointF> points;  // 物理像素；矩形=对角两点，画笔=轨迹
+    QRectF bounds;            // 包围盒（缓存，便于命中测试）
+    QString text;             // Text 内容
+    int stepNumber = 0;       // StepNumber
+    int mosaicBlockSize = 12; // Mosaic 像素块
+};
+
+class AnnotationDocument
+{
+public:
+    void setBaseImage(QImage image);          // 原图（物理像素）
+    const QImage& baseImage() const;
+    const QVector<AnnotationItem>& items() const;
+
+    void addItem(AnnotationItem item);
+    void removeItem(int index);
+    void replaceItems(QVector<AnnotationItem> items); // 撤销快照恢复
+    int hitTest(const QPointF& physicalPos) const;    // -1 = 未命中
+
+    QImage render() const;                    // 底图 + 图元，1:1 输出
+};
+
+}  // namespace snapocr::annotate
+```
+
+撤销/重做：M2 采用**快照式**命令（每条命令保存前后 `QVector<AnnotationItem>` 快照）。
+图元数量少（通常 <100），快照内存可接受（每项 <200B），正确性优先；性能不足再改增量命令。
+`QUndoStack` 上限 200 步。
+
+### 7.2 渲染与导出
+
+- 图元坐标即物理像素，`AnnotationCanvas` 控件按 `devicePixelRatio` 渲染：控件逻辑尺寸 × DPR = 原图像素尺寸；
+- 导出直接 `AnnotationDocument::render()` → `QImage`（物理像素），**不经过控件截图**，保证 1:1；
+- 马赛克：对底图相应区域做块平均/像素化后绘制，不修改原图；
+- 文字：QPainter 绘制，字体按物理像素设置；M2 先支持单行/多行文本框；
+- 箭头/直线：`QPainterPath` + 箭头三角计算；
+- 高亮：半透明矩形（`CompositionMode_SourceOver`，透明度约 25%）；
+- 导出编码：PNG（默认，无损）/JPG（质量可配 80–95）。
+
+### 7.3 工具与编辑状态
+
+- `ToolController` 管理当前工具（选择/矩形/…）；工具实现为轻量策略类，统一 `mousePress/Move/Release` 接口；
+- 选择工具：命中测试 + 拖动移动 + 删除；M2 不做旋转/缩放控制点（P1）；
+- 文字输入：覆盖在画布上的 `QTextEdit` 子控件（无边框、透明背景），失焦/`Ctrl+Enter` 提交；
+- 快捷键：`Ctrl+Z/Ctrl+Y`、`Delete`、`Esc` 退出编辑、`Enter` 完成并复制；
+- 工具栏可折叠；主题深/浅色切换即时生效。
+
+## 8. OCR 子系统（M3 / P1）
+
+### 8.1 引擎抽象
+
+```cpp
+namespace snapocr::ocr {
+
+struct OcrLanguage {
+    QString tag;          // zh-Hans-CN
+    QString displayName;  // 简体中文(中国大陆)
+};
+
+struct OcrLine {
+    QString text;
+    QRectF boundingBox;   // 原图像素坐标
+};
+
+struct OcrResult {
+    bool ok = false;
+    QString errorMessage;
+    QString languageTag;
+    QString fullText;
+    QVector<OcrLine> lines;
+    qint64 elapsedMs = 0;
+};
+
+class IOcrEngine
+{
+public:
+    virtual ~IOcrEngine() = default;
+    virtual QString id() const = 0;                        // "windows" / "rapidocr"
+    virtual QVector<OcrLanguage> languages() const = 0;
+    virtual bool isAvailable(QString* reason = nullptr) const = 0;
+    virtual OcrResult recognize(const QImage& image, const QString& languageTag) = 0;
+    // recognize 在 worker 线程调用，实现内部可阻塞；禁止触碰 UI。
+};
+
+}  // namespace snapocr::ocr
+```
+
+`OcrService` 负责：线程调度、超时、结果回主线程、语言选择、结果整理。
+
+### 8.2 WindowsOcrEngine
+
+- C++/WinRT：`winrt::Windows::Media::Ocr::OcrEngine::TryCreateFromLanguage(Language{tag})`；
+- 可用语言：`OcrEngine::AvailableRecognizerLanguages()`（本机实测仅 `zh-Hans-CN`）；
+- 图像转换：`QImage` → BGRA8 连续缓冲区 → `SoftwareBitmap::CreateCopyFromBuffer(..., BitmapPixelFormat::Bgra8, BitmapAlphaMode::Premultiplied)`；
+- 尺寸限制：`OcrEngine::MaxImageDimension`（Windows 版本相关）；超过则**切片识别**（水平/垂直切块，重叠 5%，再按行合并去重）；
+- 异步：worker 内 `winrt::init_apartment(multi_threaded)`；`RecognizeAsync(...).get()` 阻塞等待；
+- 语言缺失：`isAvailable()` 返回 false + 安装引导（设置页/提示框提供系统设置入口文案，不直接拉起 UAC）；
+- 结果：`OcrResult.lines` 按 WinRT `OcrLine` 映射，保留 bounding box 供后续高亮（P2）。
+
+### 8.3 RapidOcrEngine（P1）
+
+- 用途：Windows OCR 中文准确率不达标时切换；离线、自带模型；
+- 技术：ONNX Runtime（预编译 DLL 或 CMake FetchContent 获取）+ RapidOCR 方案三件套模型（det/cls/rec，约 15MB），Apache-2.0；
+- 预处理/后处理在 `RapidOcrEngine` 内部实现，输出同样映射为 `OcrResult`；
+- 模型文件不默认入库，M5 用下载脚本 + 校验和固定版本；需要时再考虑 Git LFS；
+- 基准：`tests/data/ocr/` 固定样本（界面文本/正文/字幕），脚本统计字符召回，作为引擎选型依据。
+
+### 8.4 取字流程（F4）
+
+1. 热键触发 → 冻结屏幕 + 覆盖层（复用截图流程，工具条隐藏或精简）；
+2. 框选确认 → `CaptureResult` 中裁剪选区 → `OcrService::recognizeAsync`；
+3. 成功：默认写剪贴板 + 托盘气泡/结果窗（按设置）；失败：中文提示 + 重试；
+4. 识别期间保持覆盖层或显示轻量进度，不阻塞 UI。
+
+## 9. 系统集成
+
+### 9.1 全局热键
+
+- `HotkeyManager`：Win32 `RegisterHotKey(hwnd, id, modifiers, vk)`，注册到隐藏消息窗口（message-only HWND）；
+- `QAbstractNativeEventFilter` 捕获 `WM_HOTKEY` → Qt 信号（`captureRequested` / `ocrRequested`）；
+- 注册失败（`ERROR_HOTKEY_ALREADY_REGISTERED`）→ 通知设置页高亮冲突项，保留旧键继续可用；
+- 默认：`F1` 截图、`F4` 取字；均可在设置中改；
+- 不安装键盘钩子（降低被杀软误报/权限问题），仅用系统热键 API。
+
+### 9.2 托盘与单实例
+
+- `QSystemTrayIcon`：图标按主题切换；菜单：截图、屏幕取字、设置、历史（P1）、关于、退出；
+- 关闭主窗口 = 隐藏到托盘（可设置退出行为）；
+- `SingleInstance`：`QLocalServer` 监听 `snapocr-<用户名>`；第二次启动连接后发送 `capture/ocr/show` 命令并退出；
+- 用户名/IPC key 加入版本号，避免多版本互串。
+
+### 9.3 剪贴板 / 自启 / 日志
+
+- 剪贴板：`QMimeData` 同时提供 PNG 与 DIB（兼容 QQ/微信/Office）；失败重试 3 次后提示；
+- 开机自启：`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，值名 `SnapOCR`，路径带引号；设置页开关即时生效；
+- 日志：`qInstallMessageHandler` 落到 `%LOCALAPPDATA%\SnapOCR\logs\snapocr-YYYYMMDD.log`，单文件 5MB × 3 轮转；级别可配；日志中禁止记录 OCR 原文（隐私）。
+
+### 9.4 设置 schema
+
+存储：`QSettings`（`QStandardPaths::AppConfigLocation` 下 `SnapOCR.ini`）；便携模式检测 exe 同目录 `SnapOCR.portable` 标记文件。
+
+| 分组 | 键（示例） | 默认 |
+|------|-----------|------|
+| general | `general/language` | `zh-CN` |
+| general | `general/startWithWindows` | false |
+| general | `general/theme` | `system` |
+| hotkeys | `hotkeys/capture` | `F1` |
+| hotkeys | `hotkeys/ocr` | `F4` |
+| capture | `capture/includeCursor` | false |
+| capture | `capture/delaySeconds` | 0 |
+| editor | `editor/lastColor` | `#FF3B30` |
+| editor | `editor/lastWidth` | 3 |
+| ocr | `ocr/engine` | `windows` |
+| ocr | `ocr/autoCopy` | true |
+| ocr | `ocr/language` | 系统语言（有 OCR 引擎时） |
+| save | `save/directory` | `图片\SnapOCR` |
+| save | `save/format` | `png` |
+| save | `save/nameTemplate` | `SnapOCR_yyyyMMdd_HHmmss` |
+| advanced | `advanced/logLevel` | `info` |
+
+配置损坏：解析失败时备份为 `SnapOCR.ini.bak` 并回落默认值。
+
+## 10. UI 结构
+
+| 界面 | 说明 | 阶段 |
+|------|------|------|
+| 主窗口 | 设置/关于入口；默认隐藏到托盘 | M0 占位 / M4 完成 |
+| 截图覆盖层 | 每屏一个，冻结画面 + 选区交互 | M1 |
+| 快捷工具条 | 标注工具 + 操作按钮 | M1/M2 |
+| 编辑画布 | 覆盖层内编辑态（或独立全屏窗口，M2 定稿） | M2 |
+| OCR 结果窗 | 文本只读/可编辑选择、复制、重新识别 | M3 |
+| 设置对话框 | 热键、捕获、保存、OCR、主题、高级 | M4 |
+| 贴图窗 | 无边框置顶、缩放/透明度/旋转 | P1 |
+| 历史面板 | 缩略图网格 | P1 |
+
+- 主题：`ThemeManager` 提供浅/深 palette + QSS；覆盖层始终使用深色半透明样式；
+- 图标：SVG 自绘或 MIT 图标集（M2 定稿并记录许可证）；QtSvg 模块按需加入；
+- 所有面向用户文本使用 `tr()`，中文为源语言。
+
+## 11. 构建、打包与 CI
+
+### 11.1 本地构建
+
+```bat
+scripts\build.bat                :: Debug + ctest
+scripts\build.bat Release        :: Release + ctest
+scripts\build.bat Release --no-tests
+```
+
+脚本职责：定位 vcvars64（VS 18/2022 任意版本）→ 初始化 MSVC → Qt/CMake/Ninja 探测 → configure → build → ctest。
+`QTDIR` 可覆盖 Qt 路径；默认 `E:\Qt6\6.11.1\msvc2022_64`。
+
+### 11.2 打包（M5）
+
+- `windeployqt --release --compiler-runtime --no-opengl-sw --translations zh_CN` 部署到 `dist/SnapOCR/`；
+- 目录结构：`SnapOCR.exe`、Qt DLL、`platforms/qwindows.dll`、`imageformats/`（JPG）、`styles/`、`translations/`；
+- 绿色版 zip：解压即用；便携模式配置写 exe 同目录；
+- 安装包（P2）：Inno Setup，写入开始菜单/开机自启可选；代码签名按需。
+
+### 11.3 CI
+
+GitHub Actions `windows-latest`：
+
+1. `install-qt-action` 安装 Qt 6.11.1 `win64_msvc2022_64`；
+2. `ilammy/msvc-dev-cmd` 初始化 MSVC；
+3. CMake + Ninja Release 构建；
+4. `ctest`（单测 + offscreen 冒烟）；
+5. 原生 `windows` 平台 `--smoke-test`。
+
+> Qt 6.11.1 已确认在官方在线仓库（`qt6_6111`）可用；若未来 aqt 安装失败，回退 Qt 6.8 LTS 并保持源码兼容。
+
+## 12. 测试策略
+
+| 层级 | 内容 | 工具/入口 |
+|------|------|-----------|
+| 单元测试 | 版本/配置、几何与 DPI 换算、选区模型、撤销重做、OCR 结果整理、文件名模板、热键解析 | Qt Test（`tests/`，`ctest`） |
+| 黄金图像 | 标注渲染与导出 1:1（固定输入 → 像素校验/哈希） | `tests/data/golden/` + 容差比较 |
+| 集成（手动） | 热键→捕获→选区→复制/保存；`F4` 取字；托盘/单实例/自启 | 手测清单（路线图 M1–M4） |
+| 兼容矩阵 | DPI 100–200%、混合 DPI、多屏排列、RDP、全屏应用 | 手测矩阵 |
+| 性能 | 热键→遮罩、OCR 耗时、空闲内存 | 内置 `QElapsedTimer` 指标 + 日志/脚本 |
+| CI | 构建 + 单测 + 冒烟 | GitHub Actions |
+
+新增核心逻辑必须配套单测；修 bug 优先补回归测试。
+
+## 13. 性能预算
+
+| 指标 | 预算 | 测量点 |
+|------|------|--------|
+| 热键 → 覆盖层可见 | ≤ 80ms（目标），≤ 150ms（可接受） | 热键回调 → 首屏覆盖 `show()` 完成 |
+| 单屏 4K 捕获 | ≤ 40ms | `CaptureService::captureAllScreens` |
+| OCR（4K 的 1/4 区域） | ≤ 1s | `OcrService` 请求 → 结果信号 |
+| 空闲内存（托盘） | ≤ 120MB | 任务管理器/进程查询 |
+| 启动到托盘可用 | ≤ 800ms | 进程启动 → 托盘图标可见 |
+
+优化手段：GDI DIB 直接内存拷贝、避免 QPixmap 缩放、按需加载、OCR 模型延迟加载、日志异步写。
+
+## 14. 依赖与许可证
+
+| 依赖 | 版本/来源 | 用途 | 许可证与合规 |
+|------|-----------|------|--------------|
+| Qt 6.11.1 | 官方安装器 | UI/网络/并发 | LGPLv3 / GPLv3；动态链接分发，附许可证声明与可替换方式 |
+| MSVC 运行库 | VS 18 | 运行时 | `windeployqt --compiler-runtime` 或 VC++ Redistributable 说明 |
+| Windows SDK / C++/WinRT | 10.0.26100 | OCR/Win32 | Microsoft 许可 |
+| Windows OCR | 系统组件 | OCR | 系统自带，随 Windows 许可 |
+| RapidOCR + ONNX Runtime（P1） | 开源 | 离线 OCR | Apache-2.0（RapidOCR、模型）/ MIT（ONNX Runtime）；保留版权与许可文件 |
+| 图标资源 | 自绘或 MIT 图标集 | UI | 记录来源与许可证（M2 定稿） |
+
+私有阶段暂不添加 LICENSE；若开源建议 MIT，同时满足 Qt LGPLv3 义务。
+
+## 15. 已知限制与风险
+
+| 项 | 说明 | 处理 |
+|----|------|------|
+| 独占全屏/DRM | GDI 可能捕获黑屏 | 明确限制 + 提示；不做绕过 |
+| Windows OCR 中文准确率 | 实测存在错字，小字号/复杂背景更明显 | 基准集量化；P1 RapidOCR；结果窗可编辑修正 |
+| 混合 DPI 覆盖层 | 跨屏事件/坐标复杂 | 逐屏窗口 + 物理坐标换算 + 单测/手测矩阵 |
+| WinRT 与 MSVC 工具集 | VS 18 与 Qt msvc2022 兼容性 | M0 已实测通过；锁定版本，CI 固定 Qt 6.11.1 |
+| 杀软误报 | 全局热键/屏幕捕获常被关注 | 不装钩子、不注入；P2 签名/安装包 |
+| 剪贴板格式兼容 | 部分 IM 只认 DIB | PNG + DIB 双格式；真实 IM 验证 |
+| 大图 OCR | 超过 `MaxImageDimension` | 切片 + 重叠合并（M3） |
+| Qt 升级 | API/行为差异 | 固定 6.11.x；升级需跑完整测试矩阵 |
+
+## 16. 开放技术问题（M1 前定稿）
+
+1. 编辑态是“覆盖层内画布”还是“独立全屏编辑窗”？影响工具条与 ESC 行为（M2 前定）。
+2. 工具条作为独立置顶窗口时，多屏跨选时跟随哪块屏的选区终点（M1 实现时定）。
+3. 捕获线程模型：一次性 `QtConcurrent::run` 还是常驻线程池（按 80ms 指标实测决定）。
+4. 贴图窗口是否需要独立进程（P1 再评估；优先同进程）。
+5. 是否引入 QtSvg 与第三方图标集（M2 定）。
