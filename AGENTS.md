@@ -5,7 +5,7 @@
 ## 项目是什么
 
 **SnapOCR**：Windows 10/11 上的轻量截图 + 标注 + OCR 工具（C++20 / Qt 6.11 Widgets / MSVC / CMake + Ninja）。
-当前阶段：**阶段 0 已完成**（仓库、四份文档、可编译骨架、CI），下一阶段为**阶段一：基本常用功能**（内部里程碑 M1–M4）；状态以 [完成情况](docs/04-完成情况.md) 为准。
+当前阶段：**阶段一已完成**（基本常用功能：截图/选区、标注、OCR、热键/托盘/设置/单实例/自启），版本 0.0.1；下一阶段为**阶段二：适当添加功能**；状态以 [完成情况](docs/04-完成情况.md) 为准。
 
 - 文档索引与维护规则：`docs/README.md`
 - 需求与验收：`docs/01-需求文档.md`
@@ -106,11 +106,12 @@ ctest --test-dir build --output-on-failure
 
 完成任何任务前，确认：构建通过、相关测试通过、文档同步、无敏感信息写入日志。
 
-## 当前验收基线（阶段 0）
+## 当前验收基线（阶段一 / v0.0.1）
 
 ```text
-构建：MSVC 19.51 + Qt 6.11.1，14 个构建步骤通过
-测试：ctest 2/2 passed（snapocr_tests、snapocr_smoke）
+构建：MSVC 19.51 + Qt 6.11.1，全量编译通过
+测试：ctest 13/13 passed（坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/文本/冒烟）
+端到端：scripts\e2e-smoke.ps1 → F1 复制图像 / Ctrl+S 保存 / F4 取字 全 PASS
 冒烟：SnapOCR.exe --smoke-test → platform=windows, PASS, exit 0
-CLI：SnapOCR.exe --version → SnapOCR 0.1.0
+CLI：SnapOCR.exe --version → SnapOCR 0.0.1
 ```

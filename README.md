@@ -53,6 +53,14 @@ P1（贴图、历史、RapidOCR、放大镜、长截图…）与 P2（录屏、�
 - CMake ≥ 3.21、Ninja（本机默认取 Qt 自带 `Tools/CMake_64`、`Tools/Ninja`）
 - Windows SDK 10.0.26100（含 C++/WinRT 头文件）
 
+## 下载安装（绿色版）
+
+到 [Releases](https://github.com/poluce/SnapOCR/releases) 下载 `SnapOCR-<版本>-win64.zip`，解压到任意目录，双击 `SnapOCR.exe` 即可：
+
+- 免安装、免管理员权限、默认零联网；
+- 首次启动常驻托盘，按 `F1` 截图、`F4` 取字（可在设置中修改热键）；
+- 配置与日志位置：`%APPDATA%\SnapOCR\SnapOCR.ini`、`%LOCALAPPDATA%\poluce\SnapOCR\logs`（exe 同目录放 `SnapOCR.portable` 文件可切换为便携模式）。
+
 ## 构建与运行
 
 ```bat
