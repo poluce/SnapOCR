@@ -379,18 +379,21 @@ void OverlayToolbar::setCurrentTool(annotate::AnnotationKind kind)
 void OverlayToolbar::setCurrentColor(const QColor& color)
 {
     m_colorButton->setProperty("color", color);
-    // 色块同样按 4 倍绘制，避免高 DPI 下发虚。
+    // 色块同样给多档 DPR，避免高 DPI 下发虚或取错尺寸。
     constexpr int kColorSize = 18;
-    constexpr int kSuperSample = 4;
-    QPixmap pixmap(kColorSize * kSuperSample, kColorSize * kSuperSample);
-    pixmap.fill(color);
-    pixmap.setDevicePixelRatio(kSuperSample);
-    QPainter painter(&pixmap);
-    painter.setPen(QPen(QColor(0x66, 0x6B, 0x73), 1));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRect(QRectF(0.5, 0.5, kColorSize - 1, kColorSize - 1));
-    painter.end();
-    m_colorButton->setIcon(QIcon(pixmap));
+    QIcon icon;
+    for (int scale : {1, 2, 3, 4}) {
+        QPixmap pixmap(kColorSize * scale, kColorSize * scale);
+        pixmap.fill(color);
+        QPainter painter(&pixmap);
+        painter.scale(scale, scale);  // 按逻辑 18x18 空间绘制，边框才能铺满整张图
+        painter.setPen(QPen(QColor(0x66, 0x6B, 0x73), 1));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(QRectF(0.5, 0.5, kColorSize - 1, kColorSize - 1));
+        painter.end();
+        icon.addPixmap(pixmap);
+    }
+    m_colorButton->setIcon(icon);
 }
 
 void OverlayToolbar::setCurrentWidth(int width)

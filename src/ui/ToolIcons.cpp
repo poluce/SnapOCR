@@ -11,10 +11,14 @@ namespace snapocr::ui {
 namespace {
 
 constexpr int kIconSize = 20;
-// 超采样倍数：图标按 4 倍物理像素绘制并标记 devicePixelRatio，
-// 这样在 150%/200%/250% 等任何缩放下都由 Qt 平滑缩到目标尺寸，
-// 而不是把 20x20 的位图放大（会明显发虚）。
-constexpr int kSuperSample = 4;
+
+// QIcon 里放入多档【物理尺寸】的 pixmap（不做 devicePixelRatio 标记）。
+// 踩过的两个坑：
+//   1) 只放 20x20 DPR=1 → 200% 下被放大，发虚；
+//   2) 放带 DPR 标记的图 → Qt 取到 40x40 条目却按逻辑 20 绘制，只剩左上角碎片。
+// 现在每档都是 DPR=1 的实际像素尺寸，Qt 按“目标物理尺寸”精确匹配：
+//   dpr1 → 20x20，dpr2 → 40x40，dpr2.5 → 60x60 缩到 50，依次类推。
+constexpr int kIconScales[] = {1, 2, 3, 4};
 
 QColor g_inkColor = QColor(0x33, 0x33, 0x33);
 
@@ -23,19 +27,9 @@ QColor inkColor()
     return g_inkColor;
 }
 
-QPixmap makePixmap()
-{
-    QPixmap pixmap(kIconSize * kSuperSample, kIconSize * kSuperSample);
-    pixmap.fill(Qt::transparent);
-    pixmap.setDevicePixelRatio(kSuperSample);
-    return pixmap;
-}
-
 void configurePainter(QPainter& painter)
 {
     painter.setRenderHint(QPainter::Antialiasing, true);
-    // 坐标系仍按 20x20 的“逻辑图标空间”书写，这里统一放大到超采样分辨率。
-    painter.scale(kSuperSample, kSuperSample);
     QPen pen(inkColor());
     pen.setWidthF(1.6);
     pen.setCapStyle(Qt::RoundCap);
@@ -44,34 +38,37 @@ void configurePainter(QPainter& painter)
     painter.setBrush(Qt::NoBrush);
 }
 
-QIcon finish(const QPixmap& pixmap)
+// 绘制函数在 20x20 的“逻辑图标空间”里作画；这里按 1x..4x 各渲染一张，
+// 全部加入同一个 QIcon，交给 Qt 按屏幕缩放挑选。
+QIcon renderIcon(void (*draw)(QPainter&))
 {
-    return QIcon(pixmap);
+    QIcon icon;
+    for (int scale : kIconScales) {
+        QPixmap pixmap(kIconSize * scale, kIconSize * scale);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        configurePainter(painter);
+        painter.scale(scale, scale);
+        draw(painter);
+        painter.end();
+        icon.addPixmap(pixmap);
+    }
+    return icon;
 }
 
-QIcon selectIcon()
+// ---- 各图标的绘制体（沿用原有 20x20 坐标） ----
+
+void drawSelect(QPainter& painter)
 {
-    QPixmap pixmap = makePixmap();
-    QPainter painter(&pixmap);
-    configurePainter(painter);
     QPolygonF arrow;
     arrow << QPointF(6, 3) << QPointF(6, 15) << QPointF(9.5, 11.5) << QPointF(12, 17)
           << QPointF(14, 16) << QPointF(11.5, 10.5) << QPointF(16, 10.5);
     painter.setBrush(QBrush(inkColor()));
     painter.drawPolygon(arrow);
-    painter.end();
-    return finish(pixmap);
 }
 
-}  // namespace
-
-QIcon toolIcon(annotate::AnnotationKind kind, const QColor& color)
+void drawTool(QPainter& painter, annotate::AnnotationKind kind)
 {
-    g_inkColor = color;
-    QPixmap pixmap = makePixmap();
-    QPainter painter(&pixmap);
-    configurePainter(painter);
-
     switch (kind) {
     case annotate::AnnotationKind::Rectangle:
         painter.drawRect(QRectF(4, 6, 12, 9));
@@ -114,7 +111,7 @@ QIcon toolIcon(annotate::AnnotationKind kind, const QColor& color)
         break;
     }
     case annotate::AnnotationKind::Highlight: {
-        QColor highlight(0xFF, 0xD5, 0x4F, 170);
+        const QColor highlight(0xFF, 0xD5, 0x4F, 170);
         painter.setPen(Qt::NoPen);
         painter.setBrush(QBrush(highlight));
         painter.drawRect(QRectF(3, 7, 14, 7));
@@ -134,22 +131,10 @@ QIcon toolIcon(annotate::AnnotationKind kind, const QColor& color)
         break;
     }
     }
-
-    painter.end();
-    return finish(pixmap);
 }
 
-QIcon actionIcon(const QString& action, const QColor& color)
+void drawAction(QPainter& painter, const QString& action)
 {
-    g_inkColor = color;
-    if (action == QLatin1String("select")) {
-        return selectIcon();
-    }
-
-    QPixmap pixmap = makePixmap();
-    QPainter painter(&pixmap);
-    configurePainter(painter);
-
     if (action == QLatin1String("undo") || action == QLatin1String("redo")) {
         const bool redo = action == QLatin1String("redo");
         painter.save();
@@ -193,9 +178,39 @@ QIcon actionIcon(const QString& action, const QColor& color)
         painter.drawLine(QPointF(7, 8), QPointF(13, 8));
         painter.drawLine(QPointF(7, 11), QPointF(13, 11));
     }
+}
 
-    painter.end();
-    return finish(pixmap);
+// QPainter 的回调无法携带参数，这里用文件内静态状态传递当前目标。
+annotate::AnnotationKind g_pendingKind = annotate::AnnotationKind::Rectangle;
+QString g_pendingAction;
+
+void drawPendingTool(QPainter& painter)
+{
+    drawTool(painter, g_pendingKind);
+}
+
+void drawPendingAction(QPainter& painter)
+{
+    drawAction(painter, g_pendingAction);
+}
+
+}  // namespace
+
+QIcon toolIcon(annotate::AnnotationKind kind, const QColor& color)
+{
+    g_inkColor = color;
+    g_pendingKind = kind;
+    return renderIcon(drawPendingTool);
+}
+
+QIcon actionIcon(const QString& action, const QColor& color)
+{
+    g_inkColor = color;
+    if (action == QLatin1String("select")) {
+        return renderIcon(drawSelect);
+    }
+    g_pendingAction = action;
+    return renderIcon(drawPendingAction);
 }
 
 }  // namespace snapocr::ui
