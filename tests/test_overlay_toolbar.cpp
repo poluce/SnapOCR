@@ -58,14 +58,21 @@ void OverlayToolbarTest::selectionModeIsSingleRow()
 
 void OverlayToolbarTest::editingModeIsStillSingleRow()
 {
-    OverlayToolbar toolbar;
-    toolbar.setEditingMode(true);
-    toolbar.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&toolbar));
-    QCOMPARE(visibleRowCount(toolbar), 1);
-    QVERIFY(toolbar.height() < 60);
-    // 编辑模式比选择模式宽（多出撤销/颜色/线宽）。
-    QVERIFY(toolbar.width() > 300);
+    OverlayToolbar editing;
+    editing.setEditingMode(true);
+    editing.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&editing));
+    QCOMPARE(visibleRowCount(editing), 1);
+    QVERIFY(editing.height() < 60);
+
+    // 撤销/重做、颜色/线宽始终显示，两种模式尺寸必须一致（切换时不跳动）。
+    OverlayToolbar selecting;
+    selecting.setEditingMode(false);
+    selecting.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&selecting));
+    QCOMPARE(visibleRowCount(selecting), 1);
+    QCOMPARE(selecting.width(), editing.width());
+    QCOMPARE(selecting.height(), editing.height());
 }
 
 void OverlayToolbarTest::hasAllActionButtons()

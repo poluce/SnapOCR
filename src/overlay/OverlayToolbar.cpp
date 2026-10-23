@@ -308,10 +308,11 @@ void OverlayToolbar::setEditingMode(bool editing)
 {
     m_editing = editing;
     // 标注工具行始终可见：选择模式下点击任一工具即进入编辑模式。
-    // 工具与动作按钮始终可见（单行）；撤销/颜色线宽仅在编辑模式出现。
+    // 整条工具条始终完整显示：工具 / 撤销重做 / 颜色线宽 / 动作按钮都不隐藏，
+    // 避免切换编辑态时工具条宽度跳变、按钮位置移动（用户要求）。
     m_toolGroup->setVisible(true);
-    m_styleGroup->setVisible(editing);
-    m_undoGroup->setVisible(editing);
+    m_styleGroup->setVisible(true);
+    m_undoGroup->setVisible(true);
     if (!editing) {
         // 退出编辑后不能残留“某个工具被选中”的假状态，否则下次截图看起来像在编辑态。
         clearToolSelection();
