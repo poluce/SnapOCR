@@ -27,6 +27,12 @@ SnapOCR 的开发文档统一为**四份**，按“需求 → 设计 → 开发 
 - 图片等资源放在 `assets/`；文档内部使用相对链接，CI 前做链接检查。
 - 文档文件名固定为 `01-需求文档.md`、`02-设计文档.md`、`03-开发文档.md`、`04-完成情况.md`。
 
+## 发布说明
+
+| 版本 | 说明 | 链接 |
+|------|------|------|
+| v0.0.1 | 首个可运行版本（截图/标注/OCR/系统集成） | [docs/releases/v0.0.1.md](releases/v0.0.1.md) · [Release](https://github.com/poluce/SnapOCR/releases/tag/v0.0.1) |
+
 ## 资源
 
 - [`assets/m0-window.png`](assets/m0-window.png) —— 阶段 0 主窗口实拍（历史记录）。
