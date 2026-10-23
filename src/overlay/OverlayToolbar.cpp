@@ -1,5 +1,7 @@
 #include "overlay/OverlayToolbar.h"
 
+#include <QAbstractButton>
+#include <QSignalBlocker>
 #include <QButtonGroup>
 #include <QColorDialog>
 #include <QHBoxLayout>
@@ -58,7 +60,11 @@ QToolButton* makeButton(const QIcon& icon, const QString& tip, const QString& ob
 OverlayToolbar::OverlayToolbar(QWidget* parent)
     : QWidget(parent)
 {
-    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+    // WindowDoesNotAcceptFocus：点击工具条按钮不能让工具条抢走键盘焦点，
+    // 否则编辑窗/覆盖层失焦，Enter、Ctrl+Z 等快捷键会失效。
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool
+                   | Qt::WindowDoesNotAcceptFocus);
+    setAttribute(Qt::WA_ShowWithoutActivating, true);
     setAttribute(Qt::WA_TranslucentBackground, false);
     setObjectName(QStringLiteral("snapocrToolbar"));
 
@@ -81,12 +87,20 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     toolLayout->setContentsMargins(0, 0, 0, 0);
     toolLayout->setSpacing(2);
 
-    auto* selectButton = makeButton(ui::actionIcon(QStringLiteral("select"), kToolbarInk), QStringLiteral("选择/移动图元"));
-    toolLayout->addWidget(selectButton);
-    connect(selectButton, &QToolButton::clicked, this, [this]() { emit selectToolSelected(); });
+    m_selectButton = makeButton(ui::actionIcon(QStringLiteral("select"), kToolbarInk),
+                                QStringLiteral("选择/移动图元"));
+    m_selectButton->setCheckable(true);
+    m_selectButton->setObjectName(QStringLiteral("selectButton"));
+    toolLayout->addWidget(m_selectButton);
 
     auto* group = new QButtonGroup(this);
     group->setExclusive(true);
+    m_toolGroupBox = group;
+    group->addButton(m_selectButton);
+    connect(m_selectButton, &QToolButton::clicked, this, [this]() {
+        m_selectDrawn = true;
+        emit selectToolSelected();
+    });
     for (const ToolDefinition& definition : kTools) {
         QToolButton* button =
             makeButton(ui::toolIcon(definition.kind, kToolbarInk), QString::fromUtf8(definition.tip));
@@ -103,12 +117,14 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     auto* undoLayout = new QHBoxLayout(m_undoGroup);
     undoLayout->setContentsMargins(0, 0, 0, 0);
     undoLayout->setSpacing(2);
-    auto* undoButton = makeButton(ui::actionIcon(QStringLiteral("undo"), kToolbarInk), QStringLiteral("撤销 Ctrl+Z"));
-    auto* redoButton = makeButton(ui::actionIcon(QStringLiteral("redo"), kToolbarInk), QStringLiteral("重做 Ctrl+Y"));
-    undoLayout->addWidget(undoButton);
-    undoLayout->addWidget(redoButton);
-    connect(undoButton, &QToolButton::clicked, this, [this]() { emit undoRequested(); });
-    connect(redoButton, &QToolButton::clicked, this, [this]() { emit redoRequested(); });
+    m_undoButton = makeButton(ui::actionIcon(QStringLiteral("undo"), kToolbarInk), QStringLiteral("撤销 Ctrl+Z"));
+    m_redoButton = makeButton(ui::actionIcon(QStringLiteral("redo"), kToolbarInk), QStringLiteral("重做 Ctrl+Y"));
+    m_undoButton->setEnabled(false);
+    m_redoButton->setEnabled(false);
+    undoLayout->addWidget(m_undoButton);
+    undoLayout->addWidget(m_redoButton);
+    connect(m_undoButton, &QToolButton::clicked, this, [this]() { emit undoRequested(); });
+    connect(m_redoButton, &QToolButton::clicked, this, [this]() { emit redoRequested(); });
 
     // ---- 颜色 / 线宽（仅编辑模式） ----
     m_styleGroup = new QWidget(this);
@@ -296,12 +312,61 @@ void OverlayToolbar::setEditingMode(bool editing)
     m_toolGroup->setVisible(true);
     m_styleGroup->setVisible(editing);
     m_undoGroup->setVisible(editing);
+    if (!editing) {
+        // 退出编辑后不能残留“某个工具被选中”的假状态，否则下次截图看起来像在编辑态。
+        clearToolSelection();
+    }
     adjustSize();
+}
+
+void OverlayToolbar::setSelectMode(bool select)
+{
+    m_selectDrawn = select;
+    if (m_selectButton != nullptr) {
+        m_selectButton->setChecked(select);
+    }
+    if (select) {
+        // 互斥组：选中“选择”后不保留任何绘图工具的勾选态
+        for (QToolButton* button : m_toolButtons) {
+            button->setChecked(false);
+        }
+    }
+    update();
+}
+
+void OverlayToolbar::clearToolSelection()
+{
+    m_selectDrawn = false;
+    if (m_toolGroupBox != nullptr) {
+        // 互斥组会强制保留一个选中项：必须先解除互斥，全部取消后再恢复。
+        const bool wasExclusive = m_toolGroupBox->exclusive();
+        m_toolGroupBox->setExclusive(false);
+        const QSignalBlocker blocker(m_toolGroupBox);
+        Q_UNUSED(blocker);
+        for (QAbstractButton* button : m_toolGroupBox->buttons()) {
+            button->setChecked(false);
+        }
+        m_toolGroupBox->setExclusive(wasExclusive);
+    }
+    update();
+}
+
+void OverlayToolbar::setUndoRedoEnabled(bool canUndo, bool canRedo)
+{
+    if (m_undoButton != nullptr) {
+        m_undoButton->setEnabled(canUndo);
+    }
+    if (m_redoButton != nullptr) {
+        m_redoButton->setEnabled(canRedo);
+    }
 }
 
 void OverlayToolbar::setCurrentTool(annotate::AnnotationKind kind)
 {
     // 与 kTools 顺序对应：下标 0 是“选择/移动”，不作为 checkable 按钮管理。
+    if (m_selectButton != nullptr) {
+        m_selectButton->setChecked(false);
+    }
     for (int i = 0; i < m_toolButtons.size(); ++i) {
         if (kTools[i].kind == kind) {
             m_toolButtons[i]->setChecked(true);

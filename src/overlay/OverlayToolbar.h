@@ -5,6 +5,7 @@
 
 #include "annotate/AnnotationTypes.h"
 
+class QButtonGroup;
 class QToolButton;
 
 namespace snapocr::overlay {
@@ -19,6 +20,9 @@ public:
     explicit OverlayToolbar(QWidget* parent = nullptr);
 
     void setEditingMode(bool editing);
+    void setSelectMode(bool select);
+    void clearToolSelection();
+    void setUndoRedoEnabled(bool canUndo, bool canRedo);
     void setCurrentTool(annotate::AnnotationKind kind);
     void setCurrentColor(const QColor& color);
     void setCurrentWidth(int width);
@@ -56,10 +60,15 @@ private:
     QWidget* m_toolGroup = nullptr;
     QWidget* m_styleGroup = nullptr;
     QWidget* m_undoGroup = nullptr;
+    QToolButton* m_selectButton = nullptr;
+    QToolButton* m_undoButton = nullptr;
+    QToolButton* m_redoButton = nullptr;
+    QButtonGroup* m_toolGroupBox = nullptr;
     QToolButton* m_colorButton = nullptr;
     QToolButton* m_widthButton = nullptr;
     QVector<QToolButton*> m_toolButtons;
     bool m_editing = false;
+    bool m_selectDrawn = false;
     int m_toolbarWidth = 0;
 };
 

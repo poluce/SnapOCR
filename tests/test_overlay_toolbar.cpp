@@ -3,6 +3,7 @@
 #include <QToolButton>
 #include <QWidget>
 
+#include "annotate/AnnotationTypes.h"
 #include "overlay/OverlayToolbar.h"
 #include "overlay/ToolbarTooltip.h"
 
@@ -22,6 +23,9 @@ private slots:
     void hasAllActionButtons();
     void copyUsesCheckAndCancelUsesX();
     void tooltipEventOpensCustomBubble();
+    void selectModeChecksArrowOnly();
+    void exitingEditingClearsToolSelection();
+    void undoRedoButtonsReflectState();
     void savePreviewWhenRequested();
 
 private:
@@ -110,6 +114,91 @@ void OverlayToolbarTest::copyUsesCheckAndCancelUsesX()
     QVERIFY(crossTopRight > 0);
     const int checkTopLeft = inkCount(checkImage, 0, 0, w / 2, h / 2);
     QVERIFY(checkTopLeft < crossTopLeft);
+}
+
+// 选择模式：只有箭头按钮处于勾选态，绘图工具全部取消。
+void OverlayToolbarTest::selectModeChecksArrowOnly()
+{
+    OverlayToolbar toolbar;
+    toolbar.setEditingMode(true);
+    toolbar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&toolbar));
+
+    auto* select = toolbar.findChild<QToolButton*>(QStringLiteral("selectButton"));
+    QVERIFY(select != nullptr);
+    QVERIFY(select->isCheckable());
+
+    toolbar.setCurrentTool(annotate::AnnotationKind::Rectangle);
+    QVERIFY(select->isChecked() == false);
+
+    toolbar.setSelectMode(true);
+    QVERIFY(select->isChecked());
+    // 绘图工具不应残留勾选
+    int checkedTools = 0;
+    const auto buttons = toolbar.findChildren<QToolButton*>();
+    for (QToolButton* button : buttons) {
+        if (button != select && button->isCheckable() && button->isChecked()) {
+            ++checkedTools;
+        }
+    }
+    QCOMPARE(checkedTools, 0);
+}
+
+// 退出编辑态后不能残留“某工具被选中”的假状态。
+void OverlayToolbarTest::exitingEditingClearsToolSelection()
+{
+    OverlayToolbar toolbar;
+    toolbar.setEditingMode(true);
+    toolbar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&toolbar));
+
+    toolbar.setCurrentTool(annotate::AnnotationKind::Ellipse);
+    bool anyChecked = false;
+    for (QToolButton* button : toolbar.findChildren<QToolButton*>()) {
+        if (button->isCheckable() && button->isChecked()) {
+            anyChecked = true;
+        }
+    }
+    QVERIFY(anyChecked);
+
+    toolbar.setEditingMode(false);
+    for (QToolButton* button : toolbar.findChildren<QToolButton*>()) {
+        if (button->isCheckable()) {
+            QVERIFY2(!button->isChecked(), "tool must be unchecked after leaving edit mode");
+        }
+    }
+}
+
+// 撤销/重做按钮要反映可用状态，栈空时禁用。
+void OverlayToolbarTest::undoRedoButtonsReflectState()
+{
+    OverlayToolbar toolbar;
+    toolbar.setEditingMode(true);
+    toolbar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&toolbar));
+
+    const auto buttons = toolbar.findChildren<QToolButton*>();
+    QToolButton* undo = nullptr;
+    QToolButton* redo = nullptr;
+    for (QToolButton* button : buttons) {
+        if (button->toolTip().startsWith(QStringLiteral("撤销"))) {
+            undo = button;
+        } else if (button->toolTip().startsWith(QStringLiteral("重做"))) {
+            redo = button;
+        }
+    }
+    QVERIFY(undo != nullptr);
+    QVERIFY(redo != nullptr);
+    QVERIFY(!undo->isEnabled());
+    QVERIFY(!redo->isEnabled());
+
+    toolbar.setUndoRedoEnabled(true, false);
+    QVERIFY(undo->isEnabled());
+    QVERIFY(!redo->isEnabled());
+
+    toolbar.setUndoRedoEnabled(false, true);
+    QVERIFY(!undo->isEnabled());
+    QVERIFY(redo->isEnabled());
 }
 
 // QEvent::ToolTip 只会发给鼠标下的按钮，工具条必须给每个按钮装过滤器接管，

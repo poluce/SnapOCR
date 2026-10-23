@@ -151,6 +151,7 @@ void OverlayController::showToolbar()
         connect(m_toolbar, &OverlayToolbar::toolSelected, this,
                 &OverlayController::enterEditingMode);
         connect(m_toolbar, &OverlayToolbar::selectToolSelected, this, [this]() {
+            m_toolbar->setSelectMode(true);
             if (m_editor != nullptr) {
                 m_editor->setSelectMode(true);
             }
@@ -272,6 +273,10 @@ void OverlayController::enterEditingMode(annotate::AnnotationKind kind)
         m_editor->setTool(kind);
         m_toolbar->setEditingMode(true);
         m_toolbar->setCurrentTool(kind);
+        if (m_editor->canvas() != nullptr) {
+            m_toolbar->setUndoRedoEnabled(m_editor->canvas()->canUndo(),
+                                          m_editor->canvas()->canRedo());
+        }
         m_editor->raise();
         raiseToolbar();
         return;
@@ -296,6 +301,16 @@ void OverlayController::enterEditingMode(annotate::AnnotationKind kind)
         connect(m_editor, &editor::EditorWindow::saveRequested, this,
                 &OverlayController::requestSave);
         m_editor->setDocument(&m_document);
+        if (m_editor->canvas() != nullptr) {
+            connect(m_editor->canvas(), &editor::AnnotationCanvas::undoStateChanged, this,
+                    [this]() {
+                        if (m_toolbar != nullptr && m_editor != nullptr
+                            && m_editor->canvas() != nullptr) {
+                            m_toolbar->setUndoRedoEnabled(m_editor->canvas()->canUndo(),
+                                                          m_editor->canvas()->canRedo());
+                        }
+                    });
+        }
     }
 
     m_editor->placeAt(selectionGlobalLogical());
@@ -314,6 +329,9 @@ void OverlayController::enterEditingMode(annotate::AnnotationKind kind)
     showToolbar();
     m_toolbar->setEditingMode(true);
     m_toolbar->setCurrentTool(kind);
+    if (m_editor->canvas() != nullptr) {
+        m_toolbar->setUndoRedoEnabled(m_editor->canvas()->canUndo(), m_editor->canvas()->canRedo());
+    }
     placeToolbar();
     // 覆盖层是置顶全屏窗口，编辑窗必须显式提到它们之上。
     for (OverlayWindow* window : m_overlays) {

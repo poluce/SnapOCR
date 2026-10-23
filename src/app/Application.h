@@ -51,6 +51,7 @@ private:
     bool initializeServices();
     void applyHotkeys();
     void registerOverlayHotkeys(bool enabled);
+    void forwardOverlayKey(int key);
     void updateHotkeyLabels();
 
     void startCapture();

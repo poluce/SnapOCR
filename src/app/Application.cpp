@@ -1,10 +1,15 @@
 #include "app/Application.h"
 
+#include <QKeyEvent>
+
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 
+#include <QAbstractSpinBox>
 #include <QApplication>
+#include <QLineEdit>
+#include <QTextEdit>
 #include <QLoggingCategory>
 #include <QDebug>
 #include <QClipboard>
@@ -176,16 +181,13 @@ bool Application::initializeServices()
     m_hotkeys = new HotkeyManager(this);
     connect(m_hotkeys, &HotkeyManager::captureRequested, this, &Application::startCapture);
     connect(m_hotkeys, &HotkeyManager::ocrRequested, this, &Application::startOcrCapture);
-    connect(m_hotkeys, &HotkeyManager::overlayCancelRequested, this, [this]() {
-        if (m_overlayController != nullptr) {
-            m_overlayController->requestCancel();
-        }
-    });
-    connect(m_hotkeys, &HotkeyManager::overlayConfirmRequested, this, [this]() {
-        if (m_overlayController != nullptr) {
-            m_overlayController->requestConfirm();
-        }
-    });
+    // 覆盖层期间的 Esc/Enter 由全局热键接住（窗口可能没有键盘焦点）。
+    // 但如果当前有模态对话框（取色/线宽）或正在输入文字，热键会先于窗口收到按键，
+    // 必须把按键转发给焦点控件，否则会出现“按 Enter 直接复制退出、文字丢失”。
+    connect(m_hotkeys, &HotkeyManager::overlayCancelRequested, this,
+            [this]() { forwardOverlayKey(Qt::Key_Escape); });
+    connect(m_hotkeys, &HotkeyManager::overlayConfirmRequested, this,
+            [this]() { forwardOverlayKey(Qt::Key_Return); });
     applyHotkeys();
 
     // 设置里的开机自启状态与注册表对齐（失败只记录，不阻塞启动）。
@@ -263,6 +265,46 @@ void Application::updateHotkeyLabels()
     }
     if (m_tray != nullptr) {
         m_tray->setHotkeyTexts(captureText, ocrText);
+    }
+}
+
+// 决定覆盖层期间收到的 Esc/Enter 该给谁：
+// 1) 有模态对话框 → 转发给对话框；
+// 2) 焦点在文本输入控件（文字标注的 QTextEdit）→ 转发，Enter 换行、Esc 取消输入；
+// 3) 否则才当作“取消/确认截图”。
+void Application::forwardOverlayKey(int key)
+{
+    auto sendTo = [key](QWidget* target) {
+        if (target == nullptr) {
+            return;
+        }
+        QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier,
+                        key == Qt::Key_Return ? QStringLiteral("\r") : QString());
+        QApplication::sendEvent(target, &press);
+    };
+
+    if (QWidget* modal = QApplication::activeModalWidget(); modal != nullptr) {
+        sendTo(modal);
+        return;
+    }
+
+    if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
+        // 文本类输入控件（文字标注 / 任何行编辑）自己处理 Enter、Esc
+        if (qobject_cast<QTextEdit*>(focus) != nullptr
+            || qobject_cast<QLineEdit*>(focus) != nullptr
+            || qobject_cast<QAbstractSpinBox*>(focus) != nullptr) {
+            sendTo(focus);
+            return;
+        }
+    }
+
+    if (m_overlayController == nullptr) {
+        return;
+    }
+    if (key == Qt::Key_Escape) {
+        m_overlayController->requestCancel();
+    } else {
+        m_overlayController->requestConfirm();
     }
 }
 
