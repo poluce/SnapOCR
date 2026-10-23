@@ -464,13 +464,15 @@ scripts\build.bat Release --no-tests
 
 GitHub Actions `windows-latest`：
 
-1. `install-qt-action` 安装 Qt 6.11.1 `win64_msvc2022_64`；
+1. `install-qt-action` 安装 **Qt 6.10.3** `win64_msvc2022_64`（CI 兼容版本）；
 2. `ilammy/msvc-dev-cmd` 初始化 MSVC；
 3. CMake + Ninja Release 构建；
 4. `ctest`（单测 + offscreen 冒烟）；
 5. 原生 `windows` 平台 `--smoke-test`。
 
-> Qt 6.11.1 已确认在官方在线仓库（`qt6_6111`）可用；若未来 aqt 安装失败，回退 Qt 6.8 LTS 并保持源码兼容。
+> **为何 CI 不用 Qt 6.11.1**：aqtinstall 3.3.0 尚不支持 Qt 6.11 的新仓库布局（`qt6_6111_*` 按架构分目录），
+> 安装会在 “Failed to locate XML data” 处失败。CI 因此固定 Qt 6.10.3（同一 6.x 大版本、API 兼容），
+> 本机开发仍用 6.11.1；源码保持 Qt 6.5+ 兼容，待 aqtinstall 支持 6.11 后升级 CI 并回填本文档。
 
 ## 12. 测试策略
 
@@ -517,7 +519,7 @@ GitHub Actions `windows-latest`：
 | 独占全屏/DRM | GDI 可能捕获黑屏 | 明确限制 + 提示；不做绕过 |
 | Windows OCR 中文准确率 | 实测存在错字，小字号/复杂背景更明显 | 基准集量化；P1 RapidOCR；结果窗可编辑修正 |
 | 混合 DPI 覆盖层 | 跨屏事件/坐标复杂 | 逐屏窗口 + 物理坐标换算 + 单测/手测矩阵 |
-| WinRT 与 MSVC 工具集 | VS 18 与 Qt msvc2022 兼容性 | M0 已实测通过；锁定版本，CI 固定 Qt 6.11.1 |
+| WinRT 与 MSVC 工具集 | VS 18 与 Qt msvc2022 兼容性 | M0 已实测通过；锁定版本，CI 固定 Qt 6.10.3（本机 6.11.1） |
 | 杀软误报 | 全局热键/屏幕捕获常被关注 | 不装钩子、不注入；P2 签名/安装包 |
 | 剪贴板格式兼容 | 部分 IM 只认 DIB | PNG + DIB 双格式；真实 IM 验证 |
 | 大图 OCR | 超过 `MaxImageDimension` | 切片 + 重叠合并（M3） |

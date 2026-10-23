@@ -25,7 +25,7 @@
 - [x] 应用控制器：命令行 `--version/--help/--smoke-test`、占位主窗口、控制台挂接。
 - [x] Qt Test 单测（版本/单实例键约束）。
 - [x] `scripts/build.bat`（vcvars64 + Qt/CMake/Ninja 探测）与 `scripts/run.bat`。
-- [x] GitHub Actions `build.yml`（Qt 6.11.1 + MSVC + Ninja + ctest + 原生冒烟）。
+- [x] GitHub Actions `build.yml`（CI 固定 Qt 6.10.3 + MSVC + Ninja + ctest + 原生冒烟；本机开发 Qt 6.11.1）。
 - [x] 计划文档：`PLAN.md`、`docs/README.md`、PRD、技术设计、路线图、开发规范、ADR-0001。
 - [x] GitHub 私有仓库 `poluce/SnapOCR` 创建并推送。
 

@@ -30,7 +30,7 @@
 5. **OCR**：先接系统 `Windows.Media.Ocr`（C++/WinRT），通过 `IOcrEngine` 抽象预留 RapidOCR（ONNX Runtime）为 P1 可切换引擎。
 6. **标注编辑**：QWidget + QPainter 自绘画布；文档模型 + 快照式 `QUndoStack` 撤销。
 7. **打包**：`windeployqt` 绿色 zip；安装包/签名放 P2。
-8. **交付**：本地仓库 + GitHub 私有远程，CI 使用 `windows-latest` + Qt 6.11.1。
+8. **交付**：本地仓库 + GitHub 私有远程；CI 使用 `windows-latest` + Qt 6.10.3（aqtinstall 兼容版本），本机开发使用 Qt 6.11.1，源码保持 Qt 6.5+ 兼容。
 
 ## 备选方案与取舍
 

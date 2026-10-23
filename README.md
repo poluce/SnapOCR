@@ -37,7 +37,7 @@ P1（贴图、历史、RapidOCR、放大镜、长截图…）与 P2（录屏、�
 - **编译**：MSVC 19.51（VS 18）、CMake ≥ 3.21、Ninja（`/utf-8`，C++20）
 - **OCR**：Windows 内置 OCR（`Windows.Media.Ocr`，C++/WinRT）优先；RapidOCR（ONNX Runtime）作为 P1 可切换引擎
 - **平台能力**：Win32 `RegisterHotKey`、GDI 屏幕捕获、PerMonitorV2 DPI、`QLocalServer` 单实例
-- **CI**：GitHub Actions `windows-latest` + `install-qt-action` + `ctest`
+- **CI**：GitHub Actions `windows-latest` + `install-qt-action` + `ctest`（CI 固定 Qt 6.10.3，本机开发用 6.11.1）
 
 ## 环境要求
 

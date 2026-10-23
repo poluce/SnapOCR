@@ -37,6 +37,7 @@ cmd.exe /c 'cd /d D:\Document\SnapOCR && scripts\build.bat Debug'
 
 环境：`QTDIR` 默认 `E:\Qt6\6.11.1\msvc2022_64`（可覆盖）；VS 18/2022 的 C++ 工作负载；CMake ≥3.21；Ninja；Windows SDK 10.0.26100。
 工具链实测：MSVC 19.51（v145）+ Qt 6.11.1 msvc2022_64 编译/链接/真实 `windows` 平台冒烟均通过。
+CI 使用 Qt 6.10.3（aqtinstall 3.3.0 尚不支持 Qt 6.11 新仓库布局），源码保持 Qt 6.5+ 兼容。
 
 ## 架构地图（先建立这张图）
 
