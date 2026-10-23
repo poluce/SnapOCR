@@ -6,6 +6,8 @@
 #include "overlay/OverlayToolbar.h"
 #include "overlay/ToolbarTooltip.h"
 
+#include <QHelpEvent>
+
 using namespace snapocr;
 using namespace snapocr::overlay;
 
@@ -19,6 +21,7 @@ private slots:
     void editingModeIsStillSingleRow();
     void hasAllActionButtons();
     void copyUsesCheckAndCancelUsesX();
+    void tooltipEventOpensCustomBubble();
     void savePreviewWhenRequested();
 
 private:
@@ -107,6 +110,40 @@ void OverlayToolbarTest::copyUsesCheckAndCancelUsesX()
     QVERIFY(crossTopRight > 0);
     const int checkTopLeft = inkCount(checkImage, 0, 0, w / 2, h / 2);
     QVERIFY(checkTopLeft < crossTopLeft);
+}
+
+// QEvent::ToolTip 只会发给鼠标下的按钮，工具条必须给每个按钮装过滤器接管，
+// 否则 Qt 默认提示会被全屏置顶覆盖层压住（用户反馈“提示显示有问题”）。
+void OverlayToolbarTest::tooltipEventOpensCustomBubble()
+{
+    OverlayToolbar toolbar;
+    toolbar.setEditingMode(true);
+    toolbar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&toolbar));
+
+    const auto buttons = toolbar.findChildren<QToolButton*>();
+    QVERIFY(buttons.size() >= 12);
+
+    ToolbarTooltip* tooltip = ToolbarTooltip::instance();
+    tooltip->hideNow();
+    QVERIFY(!tooltip->isVisible());
+
+    // 向第 2 个绘图工具按钮发送 ToolTip 事件
+    QToolButton* target = nullptr;
+    for (QToolButton* button : buttons) {
+        if (button->toolTip() == QStringLiteral("矩形")) {
+            target = button;
+            break;
+        }
+    }
+    QVERIFY2(target != nullptr, "rectangle button not found");
+
+    const QPoint local(5, 5);
+    QHelpEvent help(QEvent::ToolTip, local, target->mapToGlobal(local));
+    QApplication::sendEvent(target, &help);
+
+    QVERIFY2(help.isAccepted(), "tooltip event should be consumed by the toolbar filter");
+    tooltip->hideNow();
 }
 
 // 仅当设置 SNAPCR_TOOLBAR_PREVIEW=1 时把工具条渲染成 PNG，供人工核对外观。

@@ -4,9 +4,11 @@
 #include <QColorDialog>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QCursor>
 #include <QEvent>
 #include <QFrame>
 #include <QHelpEvent>
+#include <QTimer>
 #include <QLabel>
 #include <QToolButton>
 
@@ -165,10 +167,65 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     rootLayout->addWidget(cancelButton);
     rootLayout->addWidget(copyButton);  // 勾号固定在最右侧
 
+    // 给每个按钮装事件过滤器：用 Enter/Leave + 定时器自己驱动提示，
+    // 不依赖 Qt 的 QEvent::ToolTip（该机制在本应用里不会触发）。
+    const auto allButtons = findChildren<QToolButton*>();
+    for (QToolButton* button : allButtons) {
+        button->installEventFilter(this);
+    }
+
+    m_hoverTimer = new QTimer(this);
+    m_hoverTimer->setSingleShot(true);
+    m_hoverTimer->setInterval(500);
+    connect(m_hoverTimer, &QTimer::timeout, this, [this]() {
+        if (m_hoverButton == nullptr) {
+            return;
+        }
+        // 鼠标可能已经离开：用光标位置兜底确认。
+        const QPoint local = m_hoverButton->mapFromGlobal(QCursor::pos());
+        if (!m_hoverButton->rect().contains(local)) {
+            m_hoverButton = nullptr;
+            return;
+        }
+        ToolbarTooltip::instance()->showFor(m_hoverButton, m_hoverButton->toolTip());
+    });
+
     setEditingMode(false);
     setCurrentColor(QColor(QStringLiteral("#FF3B30")));
     setCurrentWidth(3);
     applyStyleSheet();
+}
+
+bool OverlayToolbar::eventFilter(QObject* watched, QEvent* event)
+{
+    auto* widget = qobject_cast<QWidget*>(watched);
+    if (widget == nullptr) {
+        return QWidget::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::Enter) {
+        scheduleTooltip(widget);
+        return QWidget::eventFilter(watched, event);
+    }
+    if (event->type() == QEvent::Leave) {
+        cancelTooltip();
+        return QWidget::eventFilter(watched, event);
+    }
+    if (event->type() == QEvent::ToolTip) {
+        auto* help = static_cast<QHelpEvent*>(event);
+        const QString text = widget->toolTip();
+        if (!text.isEmpty()) {
+            ToolbarTooltip::instance()->showFor(widget, text);
+        } else {
+            hideTooltipNow();
+        }
+        Q_UNUSED(help);
+        return true;  // 阻止 Qt 默认提示
+    }
+    if (event->type() == QEvent::Leave || event->type() == QEvent::Hide) {
+        hideTooltipNow();
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 bool OverlayToolbar::event(QEvent* event)
@@ -195,6 +252,28 @@ bool OverlayToolbar::event(QEvent* event)
 
 void OverlayToolbar::hideTooltipNow()
 {
+    cancelTooltip();
+    ToolbarTooltip::instance()->hideNow();
+}
+
+void OverlayToolbar::scheduleTooltip(QWidget* button)
+{
+    if (button == nullptr || button->toolTip().isEmpty()) {
+        return;
+    }
+    ToolbarTooltip::instance()->hideNow();
+    m_hoverButton = button;
+    if (m_hoverTimer != nullptr) {
+        m_hoverTimer->start();
+    }
+}
+
+void OverlayToolbar::cancelTooltip()
+{
+    if (m_hoverTimer != nullptr) {
+        m_hoverTimer->stop();
+    }
+    m_hoverButton = nullptr;
     ToolbarTooltip::instance()->hideNow();
 }
 

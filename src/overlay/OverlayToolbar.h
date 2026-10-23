@@ -42,10 +42,16 @@ signals:
 
 protected:
     bool event(QEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void applyStyleSheet();
     void hideTooltipNow();
+    void scheduleTooltip(QWidget* button);
+    void cancelTooltip();
+
+    class QTimer* m_hoverTimer = nullptr;
+    QWidget* m_hoverButton = nullptr;
 
     QWidget* m_toolGroup = nullptr;
     QWidget* m_styleGroup = nullptr;

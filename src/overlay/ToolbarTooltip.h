@@ -27,8 +27,10 @@ protected:
 
 private:
     ToolbarTooltip();
+    void keepOnTop();
 
     QString m_text;
+    class QTimer* m_raiseTimer = nullptr;
 };
 
 }  // namespace snapocr::overlay

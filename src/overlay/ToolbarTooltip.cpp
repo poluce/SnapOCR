@@ -1,6 +1,7 @@
 #include "overlay/ToolbarTooltip.h"
 
 #include <QGuiApplication>
+#include <QTimer>
 #include <QPainter>
 #include <QPainterPath>
 #include <QScreen>
@@ -30,6 +31,12 @@ ToolbarTooltip::ToolbarTooltip()
     QFont font = this->font();
     font.setPixelSize(12);
     setFont(font);
+
+    // 覆盖层是同级的置顶全屏窗口，被重新 raise 时会把气泡压下去；
+    // 显示期间定时重新置顶（开销极小），确保提示始终可见。
+    m_raiseTimer = new QTimer(this);
+    m_raiseTimer->setInterval(120);
+    connect(m_raiseTimer, &QTimer::timeout, this, [this]() { keepOnTop(); });
 }
 
 ToolbarTooltip* ToolbarTooltip::instance()
@@ -77,11 +84,28 @@ void ToolbarTooltip::showFor(QWidget* anchor, const QString& text)
     show();
     raise();
     update();
+    if (m_raiseTimer != nullptr) {
+        m_raiseTimer->start();
+    }
 }
 
 void ToolbarTooltip::hideNow()
 {
+    if (m_raiseTimer != nullptr) {
+        m_raiseTimer->stop();
+    }
     hide();
+}
+
+void ToolbarTooltip::keepOnTop()
+{
+    if (!isVisible()) {
+        if (m_raiseTimer != nullptr) {
+            m_raiseTimer->stop();
+        }
+        return;
+    }
+    raise();
 }
 
 void ToolbarTooltip::paintEvent(QPaintEvent* event)
