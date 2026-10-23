@@ -58,19 +58,17 @@ void ToolbarTooltip::showFor(QWidget* anchor, const QString& text)
     const int textHeight = metrics.height();
     resize(textWidth + kPaddingX * 2, textHeight + kPaddingY * 2);
 
-    // 默认放在锚点下方居中；下方空间不足则放上方。
+    // 提示固定显示在按钮【上方】居中：放下方会与鼠标指针重叠。
+    // 只有上方空间不足（例如工具条贴到屏幕顶部）才退回到下方。
     const QRect anchorRect(anchor->mapToGlobal(QPoint(0, 0)), anchor->size());
     QScreen* screen = anchor->screen() != nullptr ? anchor->screen() : QGuiApplication::primaryScreen();
     const QRect available = screen != nullptr ? screen->availableGeometry()
                                               : QRect(anchorRect.topLeft(), QSize(1920, 1080));
 
     int x = anchorRect.center().x() - width() / 2;
-    int y = anchorRect.bottom() + 6;
-    if (y + height() > available.bottom()) {
-        y = anchorRect.top() - height() - 6;
-    }
+    int y = anchorRect.top() - height() - 6;  // 优先上方
     if (y < available.top()) {
-        y = anchorRect.bottom() + 6;
+        y = anchorRect.bottom() + 6;  // 上方放不下才退到下方
     }
     if (x + width() > available.right()) {
         x = available.right() - width() - 4;
