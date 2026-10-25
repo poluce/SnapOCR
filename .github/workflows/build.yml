@@ -60,6 +60,11 @@ jobs:
           Copy-Item "README.md" "$pkg/README.md"
           & windeployqt --release --no-opengl-sw --no-system-d3d-compiler --no-quick-import --compiler-runtime --translations zh_CN "$pkg/SnapOCR.exe"
           if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
+          # 裁掉 Widgets/光栅程序用不到的 DirectX 着色器编译器（约 16MB）
+          foreach ($dead in @("dxcompiler.dll", "dxil.dll")) {
+            $deadPath = Join-Path $pkg $dead
+            if (Test-Path $deadPath) { Remove-Item $deadPath -Force; Write-Host "pruned: $dead" }
+          }
           # 我们自己的界面翻译（snapocr_*.qm）也要打进发布包，否则英文 UI 不生效
           if (Test-Path "build/translations") {
             New-Item -ItemType Directory -Force -Path "$pkg/translations" | Out-Null

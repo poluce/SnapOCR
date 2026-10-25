@@ -99,6 +99,22 @@ if exist "%BUILD_PATH%\translations\*.qm" (
     )
 )
 
+rem ---- prune files Qt pulls in but a Widgets/raster app never loads ----
+rem dxcompiler.dll + dxil.dll are the DirectX shader compiler (Qt Quick/RHI D3D);
+rem this app paints with QPainter raster only, so they are ~16MB of dead weight.
+rem vc_redist.x64.exe is intentionally KEPT so users on clean machines can install
+rem the MSVC runtime if the app fails to start.
+for %%F in (dxcompiler.dll dxil.dll) do (
+    if exist "%PKG_DIR%\%%F" (
+        del /q "%PKG_DIR%\%%F" >nul 2>nul
+        if exist "%PKG_DIR%\%%F" (
+            echo [WARN] Could not remove %PKG_DIR%\%%F
+        ) else (
+            echo [INFO] Pruned %%~F
+        )
+    )
+)
+
 echo [INFO] Creating zip
 if exist "%ZIP_PATH%" del /q "%ZIP_PATH%"
 rem ? Windows ?? bsdtar ???Compress-Archive ? PowerShell 5.1 ????
