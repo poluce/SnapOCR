@@ -57,6 +57,11 @@ void TranslatorTest::loadsEnglishTranslation()
              QStringLiteral("Capture hotkey"));
     QCOMPARE(QCoreApplication::translate("snapocr::app::TrayController", "退出"),
              QStringLiteral("Quit"));
+    QCOMPARE(QCoreApplication::translate("snapocr::app::Application", "设置已保存"),
+             QStringLiteral("Settings saved"));
+    QCOMPARE(QCoreApplication::translate("snapocr::app::Application",
+                                         "已复制到剪贴板（%1 × %2）"),
+             QStringLiteral("Copied to clipboard (%1 × %2)"));
 }
 
 void TranslatorTest::missingLanguageFallsBackToSource()

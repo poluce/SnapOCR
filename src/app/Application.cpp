@@ -262,9 +262,9 @@ bool Application::initializeServices()
             [this](const QString& hex) {
                 QString error;
                 if (platform::win32::copyTextToClipboard(hex, &error)) {
-                    showInfo(QStringLiteral("已复制颜色 %1").arg(hex));
+                    showInfo(tr("已复制颜色 %1").arg(hex));
                 } else {
-                    showError(QStringLiteral("复制颜色失败：%1").arg(error));
+                    showError(tr("复制颜色失败：%1").arg(error));
                 }
             });
 
@@ -274,7 +274,7 @@ bool Application::initializeServices()
     connect(m_overlayController, &overlay::OverlayController::finished, this, [this]() {
         registerOverlayHotkeys(false);
         if (m_mainWindow != nullptr) {
-            m_mainWindow->setStatusText(QStringLiteral("就绪"));
+            m_mainWindow->setStatusText(tr("就绪"));
         }
     });
 
@@ -341,8 +341,8 @@ void Application::applyHotkeys()
         const bool fallback = m_hotkeys->registerHotkey(HotkeyManager::Action::Capture,
                                                         QStringLiteral("F1"), nullptr);
         showError(fallback
-                      ? QStringLiteral("%1，已临时改用 F1。可在设置中更换截图热键。").arg(captureError)
-                      : QStringLiteral("%1，且默认 F1 也不可用。请在设置中更换截图热键。")
+                      ? tr("%1，已临时改用 F1。可在设置中更换截图热键。").arg(captureError)
+                      : tr("%1，且默认 F1 也不可用。请在设置中更换截图热键。")
                             .arg(captureError));
     }
 
@@ -355,8 +355,8 @@ void Application::applyHotkeys()
         const bool fallback =
             m_hotkeys->registerHotkey(HotkeyManager::Action::Ocr, QStringLiteral("F4"), nullptr);
         showError(fallback
-                      ? QStringLiteral("%1，已临时改用 F4。可在设置中更换取字热键。").arg(ocrError)
-                      : QStringLiteral("%1，且默认 F4 也不可用。请在设置中更换取字热键。")
+                      ? tr("%1，已临时改用 F4。可在设置中更换取字热键。").arg(ocrError)
+                      : tr("%1，且默认 F4 也不可用。请在设置中更换取字热键。")
                             .arg(ocrError));
     }
 
@@ -466,7 +466,7 @@ void Application::startCapture()
         m_delayOcrMode = false;
         if (m_tray != nullptr && m_tray->isAvailable()) {
             m_tray->showMessage(QStringLiteral("SnapOCR"),
-                                QStringLiteral("%1 秒后截图…").arg(delay));
+                                tr("%1 秒后截图…").arg(delay));
         }
         QTimer::singleShot(delay * 1000, this, [this]() {
             m_delayPending = false;
@@ -490,8 +490,8 @@ void Application::beginCaptureNow(bool ocrMode)
         m_delayPending = false;
     }
     if (m_mainWindow != nullptr) {
-        m_mainWindow->setStatusText(ocrMode ? QStringLiteral("取字：拖拽选择区域")
-                                            : QStringLiteral("截图：拖拽选择区域"));
+        m_mainWindow->setStatusText(ocrMode ? tr("取字：拖拽选择区域")
+                                            : tr("截图：拖拽选择区域"));
     }
     if (ocrMode) {
         m_overlayController->beginOcrCapture();
@@ -516,7 +516,7 @@ void Application::startOcrCapture()
         m_delayOcrMode = true;
         if (m_tray != nullptr && m_tray->isAvailable()) {
             m_tray->showMessage(QStringLiteral("SnapOCR"),
-                                QStringLiteral("%1 秒后取字…").arg(delay));
+                                tr("%1 秒后取字…").arg(delay));
         }
         QTimer::singleShot(delay * 1000, this, [this]() {
             m_delayPending = false;
@@ -562,11 +562,11 @@ void Application::startScrollingCapture(const QRect& physicalRect)
                     recordHistory(image);
                     QString error;
                     if (platform::win32::copyImageToClipboard(image, &error)) {
-                        showInfo(QStringLiteral("长截图完成（%1 × %2），已复制到剪贴板")
+                        showInfo(tr("长截图完成（%1 × %2），已复制到剪贴板")
                                      .arg(image.width())
                                      .arg(image.height()));
                     } else {
-                        showInfo(QStringLiteral("长截图完成（%1 × %2），但复制失败：%3")
+                        showInfo(tr("长截图完成（%1 × %2），但复制失败：%3")
                                      .arg(image.width())
                                      .arg(image.height())
                                      .arg(error));
@@ -578,7 +578,7 @@ void Application::startScrollingCapture(const QRect& physicalRect)
                         m_scrollingBar->close();
                     }
                     registerOverlayHotkeys(false);
-                    showError(QStringLiteral("长截图失败：%1").arg(message));
+                    showError(tr("长截图失败：%1").arg(message));
                 });
         connect(m_scrolling, &capture::ScrollingCaptureController::progress, this,
                 [this](int frames, int height) {
@@ -649,7 +649,7 @@ void Application::cancelScrollingCapture()
         m_scrollingBar->close();
     }
     registerOverlayHotkeys(false);
-    showInfo(QStringLiteral("已取消长截图"));
+    showInfo(tr("已取消长截图"));
 }
 
 void Application::openEditorForImage(const QImage& image)
@@ -720,7 +720,7 @@ void Application::openEditorForImage(const QImage& image)
 
     m_pinEditor = editor;
     if (m_mainWindow != nullptr) {
-        m_mainWindow->setStatusText(QStringLiteral("贴图再标注：Enter 复制，Ctrl+S 保存，Esc 关闭"));
+        m_mainWindow->setStatusText(tr("贴图再标注：Enter 复制，Ctrl+S 保存，Esc 关闭"));
     }
 }
 
@@ -731,12 +731,12 @@ void Application::pinLatestFromHistory()
     }
     const QVector<history::HistoryEntry> entries = m_history->entries();
     if (entries.isEmpty()) {
-        showInfo(QStringLiteral("还没有历史截图：先截一张再试"));
+        showInfo(tr("还没有历史截图：先截一张再试"));
         return;
     }
     const QImage image = m_history->load(entries.first());
     if (image.isNull()) {
-        showError(QStringLiteral("历史截图读取失败"));
+        showError(tr("历史截图读取失败"));
         return;
     }
     pinImage(image);
@@ -782,7 +782,7 @@ void Application::pinImage(const QImage& image)
     // F-ANN-19：贴图可再取字 / 再标注
     connect(pin, &ui::PinWindow::ocrRequested, this, [this](const QImage& img) {
         if (m_mainWindow != nullptr) {
-            m_mainWindow->setStatusText(QStringLiteral("贴图取字：识别中…"));
+            m_mainWindow->setStatusText(tr("贴图取字：识别中…"));
         }
         runOcr(img);
     });
@@ -800,7 +800,7 @@ void Application::pinImage(const QImage& image)
 
     m_pins.append(QPointer<ui::PinWindow>(pin));
     if (m_mainWindow != nullptr) {
-        m_mainWindow->setStatusText(QStringLiteral("已贴图（滚轮缩放，R 旋转，Esc 关闭）"));
+        m_mainWindow->setStatusText(tr("已贴图（滚轮缩放，R 旋转，Esc 关闭）"));
     }
 }
 
@@ -809,9 +809,9 @@ void Application::onCopyRequested(const QImage& image)
     recordHistory(image);
     QString error;
     if (platform::win32::copyImageToClipboard(image, &error)) {
-        showInfo(QStringLiteral("已复制到剪贴板（%1 × %2）").arg(image.width()).arg(image.height()));
+        showInfo(tr("已复制到剪贴板（%1 × %2）").arg(image.width()).arg(image.height()));
     } else {
-        showError(QStringLiteral("复制失败：%1").arg(error));
+        showError(tr("复制失败：%1").arg(error));
     }
 
     // F-ANN-20：可配置的“一键复制并贴图”
@@ -826,9 +826,9 @@ void Application::onSaveRequested(const QImage& image)
     QString savedPath;
     QString error;
     if (ImageSaver::save(image, m_settings, &savedPath, &error)) {
-        showInfo(QStringLiteral("已保存：%1").arg(QDir::toNativeSeparators(savedPath)));
+        showInfo(tr("已保存：%1").arg(QDir::toNativeSeparators(savedPath)));
     } else {
-        showError(QStringLiteral("保存失败：%1").arg(error));
+        showError(tr("保存失败：%1").arg(error));
     }
 }
 
@@ -840,7 +840,7 @@ void Application::onCaptureError(const QString& message)
 void Application::runOcr(const QImage& image)
 {
     if (image.isNull()) {
-        showError(QStringLiteral("没有可识别的图像"));
+        showError(tr("没有可识别的图像"));
         return;
     }
 
@@ -850,7 +850,7 @@ void Application::runOcr(const QImage& image)
         m_overlayController != nullptr && m_overlayController->lastSelectionTouchesScreenEdge();
 
     ui::OcrResultDialog* dialog = ensureOcrDialog();
-    dialog->setBusy(QStringLiteral("正在识别…（离线本地识别）"));
+    dialog->setBusy(tr("正在识别…（离线本地识别）"));
     dialog->show();
     dialog->raise();
     dialog->activateWindow();
@@ -860,7 +860,7 @@ void Application::runOcr(const QImage& image)
     }
     if (m_ocrService->isBusy()) {
         dialog->setResult(ocr::OcrResult{.ok = false,
-                                         .errorMessage = QStringLiteral("上一次识别还没结束，请稍候")});
+                                         .errorMessage = tr("上一次识别还没结束，请稍候")});
         return;
     }
     m_ocrService->recognizeAsync(image, m_settings.ocrLanguage);
@@ -875,12 +875,12 @@ ui::OcrResultDialog* Application::ensureOcrDialog()
     auto* dialog = new ui::OcrResultDialog(m_mainWindow.get());
     dialog->setAttribute(Qt::WA_DeleteOnClose, true);
     connect(dialog, &ui::OcrResultDialog::copyRequested, this, [this](const QString&) {
-        showInfo(QStringLiteral("识别文本已复制到剪贴板"));
+        showInfo(tr("识别文本已复制到剪贴板"));
     });
     connect(dialog, &ui::OcrResultDialog::retryRequested, this, [this, dialog]() {
         if (!m_lastOcrImage.isNull()) {
             const QImage image = m_lastOcrImage;
-            dialog->setBusy(QStringLiteral("正在重新识别…"));
+            dialog->setBusy(tr("正在重新识别…"));
             m_ocrService->recognizeAsync(image, m_settings.ocrLanguage);
         }
     });
@@ -912,11 +912,11 @@ void Application::onOcrFinished(const ocr::OcrResult& result)
     const QString copyText = result.cleanText.isEmpty() ? result.fullText : result.cleanText;
     if (m_settings.ocrAutoCopy) {
         QApplication::clipboard()->setText(copyText);
-        showInfo(QStringLiteral("已识别 %1 行文字并复制到剪贴板（%2ms）")
+        showInfo(tr("已识别 %1 行文字并复制到剪贴板（%2ms）")
                      .arg(result.lines.size())
                      .arg(result.elapsedMs));
     } else {
-        showInfo(QStringLiteral("已识别 %1 行文字（%2ms）")
+        showInfo(tr("已识别 %1 行文字（%2ms）")
                      .arg(result.lines.size())
                      .arg(result.elapsedMs));
     }
@@ -1026,7 +1026,7 @@ void Application::applySettings(const common::AppSettings& incoming)
 
     persistSettings();
     if (m_mainWindow != nullptr) {
-        m_mainWindow->setStatusText(QStringLiteral("设置已保存"));
+        m_mainWindow->setStatusText(tr("设置已保存"));
     }
 }
 
@@ -1037,7 +1037,7 @@ void Application::persistSettings()
     }
     QString error;
     if (!m_settingsStore->save(m_settings, &error)) {
-        showError(QStringLiteral("设置保存失败：%1").arg(error));
+        showError(tr("设置保存失败：%1").arg(error));
     }
 }
 
@@ -1207,7 +1207,7 @@ int Application::runCaptureSelfTest()
     service.captureAllScreens();
 
     if (!captured.isValid()) {
-        out << "FAIL: " << (error.isEmpty() ? QStringLiteral("捕获失败") : error) << '\n';
+        out << "FAIL: " << (error.isEmpty() ? tr("捕获失败") : error) << '\n';
         out.flush();
         return EXIT_FAILURE;
     }

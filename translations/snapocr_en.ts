@@ -2,6 +2,145 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US">
 <context>
+    <name>snapocr::app::Application</name>
+    <message>
+        <source>已复制颜色 %1</source>
+        <translation>Copied color %1</translation>
+    </message>
+    <message>
+        <source>复制颜色失败：%1</source>
+        <translation>Failed to copy color: %1</translation>
+    </message>
+    <message>
+        <source>就绪</source>
+        <translation>Ready</translation>
+    </message>
+    <message>
+        <source>%1，已临时改用 F1。可在设置中更换截图热键。</source>
+        <translation>%1 Temporarily using F1 instead. You can change the capture hotkey in Settings.</translation>
+    </message>
+    <message>
+        <source>%1，且默认 F1 也不可用。请在设置中更换截图热键。</source>
+        <translation>%1 and the default F1 is also unavailable. Please change the capture hotkey in Settings.</translation>
+    </message>
+    <message>
+        <source>%1，已临时改用 F4。可在设置中更换取字热键。</source>
+        <translation>%1 Temporarily using F4 instead. You can change the OCR hotkey in Settings.</translation>
+    </message>
+    <message>
+        <source>%1，且默认 F4 也不可用。请在设置中更换取字热键。</source>
+        <translation>%1 and the default F4 is also unavailable. Please change the OCR hotkey in Settings.</translation>
+    </message>
+    <message>
+        <source>%1 秒后截图…</source>
+        <translation>Capturing in %1 s…</translation>
+    </message>
+    <message>
+        <source>取字：拖拽选择区域</source>
+        <translation>Grab text: drag to select</translation>
+    </message>
+    <message>
+        <source>截图：拖拽选择区域</source>
+        <translation>Capture: drag to select</translation>
+    </message>
+    <message>
+        <source>%1 秒后取字…</source>
+        <translation>Grabbing text in %1 s…</translation>
+    </message>
+    <message>
+        <source>长截图完成（%1 × %2），已复制到剪贴板</source>
+        <translation>Long screenshot done (%1 × %2), copied to clipboard</translation>
+    </message>
+    <message>
+        <source>长截图完成（%1 × %2），但复制失败：%3</source>
+        <translation>Long screenshot done (%1 × %2) but copy failed: %3</translation>
+    </message>
+    <message>
+        <source>长截图失败：%1</source>
+        <translation>Long screenshot failed: %1</translation>
+    </message>
+    <message>
+        <source>已取消长截图</source>
+        <translation>Long screenshot cancelled</translation>
+    </message>
+    <message>
+        <source>贴图再标注：Enter 复制，Ctrl+S 保存，Esc 关闭</source>
+        <translation>Annotating pinned image: Enter to copy, Ctrl+S to save, Esc to close</translation>
+    </message>
+    <message>
+        <source>还没有历史截图：先截一张再试</source>
+        <translation>No screenshots yet. Capture one first.</translation>
+    </message>
+    <message>
+        <source>历史截图读取失败</source>
+        <translation>Failed to read the history image</translation>
+    </message>
+    <message>
+        <source>贴图取字：识别中…</source>
+        <translation>Grab text from pinned image: recognizing…</translation>
+    </message>
+    <message>
+        <source>已贴图（滚轮缩放，R 旋转，Esc 关闭）</source>
+        <translation>Pinned (wheel to zoom, R to rotate, Esc to close)</translation>
+    </message>
+    <message>
+        <source>已复制到剪贴板（%1 × %2）</source>
+        <translation>Copied to clipboard (%1 × %2)</translation>
+    </message>
+    <message>
+        <source>复制失败：%1</source>
+        <translation>Copy failed: %1</translation>
+    </message>
+    <message>
+        <source>已保存：%1</source>
+        <translation>Saved: %1</translation>
+    </message>
+    <message>
+        <source>保存失败：%1</source>
+        <translation>Save failed: %1</translation>
+    </message>
+    <message>
+        <source>没有可识别的图像</source>
+        <translation>No image to recognize</translation>
+    </message>
+    <message>
+        <source>正在识别…（离线本地识别）</source>
+        <translation>Recognizing… (offline)</translation>
+    </message>
+    <message>
+        <source>上一次识别还没结束，请稍候</source>
+        <translation>Previous recognition is still running, please wait</translation>
+    </message>
+    <message>
+        <source>识别文本已复制到剪贴板</source>
+        <translation>Recognized text copied to clipboard</translation>
+    </message>
+    <message>
+        <source>正在重新识别…</source>
+        <translation>Retrying…</translation>
+    </message>
+    <message>
+        <source>已识别 %1 行文字并复制到剪贴板（%2ms）</source>
+        <translation>Recognized %1 lines and copied to clipboard (%2 ms)</translation>
+    </message>
+    <message>
+        <source>已识别 %1 行文字（%2ms）</source>
+        <translation>Recognized %1 lines (%2 ms)</translation>
+    </message>
+    <message>
+        <source>设置已保存</source>
+        <translation>Settings saved</translation>
+    </message>
+    <message>
+        <source>设置保存失败：%1</source>
+        <translation>Failed to save settings: %1</translation>
+    </message>
+    <message>
+        <source>捕获失败</source>
+        <translation>Capture failed</translation>
+    </message>
+</context>
+<context>
     <name>snapocr::app::TrayController</name>
     <message>
         <source>截图</source>
