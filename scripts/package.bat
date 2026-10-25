@@ -17,6 +17,14 @@ set "REPO_ROOT=%~dp0.."
 pushd "%REPO_ROOT%" >nul
 
 if not defined QTDIR set "QTDIR=E:\Qt6\6.11.1\msvc2022_64"
+rem CI: Qt path is injected via PATH by install-qt-action; derive QTDIR from windeployqt.
+if not exist "%QTDIR%\bin\windeployqt.exe" (
+    for /f "delims=" %%I in ('where windeployqt.exe 2^>nul') do (
+        set "QTDIR=%%~dpI.."
+        goto :qtdir_ready
+    )
+)
+:qtdir_ready
 if not exist "%QTDIR%\bin\windeployqt.exe" (
     echo [ERROR] windeployqt not found. Set QTDIR to the Qt msvc2022_64 directory.
     echo         Current QTDIR=%QTDIR%
@@ -82,8 +90,8 @@ if errorlevel 1 (
 
 echo [INFO] Creating zip
 if exist "%ZIP_PATH%" del /q "%ZIP_PATH%"
-rem 用 Windows 自带 bsdtar 打包：Compress-Archive 在 PowerShell 5.1 下会写出
-rem 反斜杠分隔的条目名（非标准 zip），跨平台解压会失败。tar -a 生成标准 zip。
+rem ? Windows ?? bsdtar ???Compress-Archive ? PowerShell 5.1 ????
+rem ????????????? zip???????????tar -a ???? zip?
 where tar.exe >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] tar.exe not found. Windows 10 1803+ should provide it.

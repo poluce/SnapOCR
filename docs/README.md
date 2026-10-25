@@ -32,6 +32,7 @@ SnapOCR 的开发文档统一为**四份**，按“需求 → 设计 → 开发 
 | 版本 | 说明 | 链接 |
 |------|------|------|
 | v0.0.1 | 首个可运行版本（截图/标注/OCR/系统集成） | [docs/releases/v0.0.1.md](releases/v0.0.1.md) · [Release](https://github.com/poluce/SnapOCR/releases/tag/v0.0.1) |
+| v0.1.0 | 阶段二：延时/光标/取色/窗口识别/长截图/历史/贴图/标注与 OCR 增强 | [docs/releases/v0.1.0.md](releases/v0.1.0.md) |
 
 ## 资源
 

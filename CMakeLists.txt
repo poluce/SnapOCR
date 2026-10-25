@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(SnapOCR
-    VERSION 0.0.1
+    VERSION 0.1.0
     DESCRIPTION "Windows 截图、标注与 OCR 工具"
     HOMEPAGE_URL "https://github.com/poluce/SnapOCR"
     LANGUAGES CXX

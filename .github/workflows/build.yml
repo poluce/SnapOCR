@@ -47,3 +47,27 @@ jobs:
           if ($proc.ExitCode -ne 0) {
             throw "SnapOCR --smoke-test failed with exit code $($proc.ExitCode)"
           }
+
+      # 发布工程：windeployqt 绿色包 + zip；只在 main 分支推送时产出 artifact
+      - name: Package (windeployqt + zip)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path CMakeLists.txt -Pattern '^\s*VERSION\s+(\S+)').Matches[0].Groups[1].Value
+          $pkg = "dist/SnapOCR-$version"
+          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+          Copy-Item "build/SnapOCR.exe" "$pkg/SnapOCR.exe"
+          Copy-Item "README.md" "$pkg/README.md"
+          & windeployqt --release --no-opengl-sw --no-system-d3d-compiler --no-quick-import --compiler-runtime --translations zh_CN "$pkg/SnapOCR.exe"
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
+          tar -a -c -f "dist/SnapOCR-$version-win64.zip" -C dist "SnapOCR-$version"
+          Write-Host "packaged: dist/SnapOCR-$version-win64.zip"
+          (Get-Item "dist/SnapOCR-$version-win64.zip").Length
+
+      - name: Upload package artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SnapOCR-win64-package
+          path: dist/SnapOCR-*-win64.zip
+          retention-days: 14

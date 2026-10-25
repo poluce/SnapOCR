@@ -9,6 +9,7 @@
 #include <QAbstractSpinBox>
 #include <QApplication>
 #include <QCursor>
+#include <QElapsedTimer>
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QLoggingCategory>
@@ -927,6 +928,8 @@ int Application::runCaptureSelfTest()
             << " logicalDpi=" << screen->logicalDotsPerInch() << '\n';
     }
 
+    QElapsedTimer captureTimer;
+    captureTimer.start();
     capture::CaptureService service;
     capture::CaptureResult captured;
     QString error;
@@ -951,6 +954,7 @@ int Application::runCaptureSelfTest()
     }
     out << "  virtual : " << captured.virtualGeometry.width() << 'x'
         << captured.virtualGeometry.height() << '\n';
+    out << "  timing  : captureAll=" << captureTimer.elapsed() << "ms\n";
 
     // 区域捕获（滚动长截图用）：从第一块屏中间抓一块，校验尺寸
     {
@@ -958,8 +962,11 @@ int Application::runCaptureSelfTest()
         const QRect region(firstGeometry.center() - QPoint(60, 40), QSize(120, 80));
         QImage regionImage;
         QString regionError;
+        QElapsedTimer regionTimer;
+        regionTimer.start();
         if (platform::win32::ScreenCapture::captureRegion(region, &regionImage, &regionError)) {
-            out << "  region  : " << regionImage.width() << 'x' << regionImage.height() << '\n';
+            out << "  region  : " << regionImage.width() << 'x' << regionImage.height()
+                << " (" << regionTimer.elapsed() << "ms)\n";
             if (regionImage.width() != region.width() || regionImage.height() != region.height()) {
                 out << "FAIL: 区域捕获尺寸不符\n";
                 out.flush();
