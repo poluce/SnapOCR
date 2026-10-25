@@ -88,6 +88,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem ---- UI translations (snapocr_*.qm): without these the English UI is unavailable ----
+if exist "%BUILD_PATH%\translations\*.qm" (
+    if not exist "%PKG_DIR%\translations" mkdir "%PKG_DIR%\translations" 2>nul
+    copy /y "%BUILD_PATH%\translations\*.qm" "%PKG_DIR%\translations\" >nul
+    if errorlevel 1 (
+        echo [ERROR] Copy UI translations failed.
+        popd >nul
+        exit /b 1
+    )
+)
+
 echo [INFO] Creating zip
 if exist "%ZIP_PATH%" del /q "%ZIP_PATH%"
 rem ? Windows ?? bsdtar ???Compress-Archive ? PowerShell 5.1 ????

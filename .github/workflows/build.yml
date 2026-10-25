@@ -60,6 +60,11 @@ jobs:
           Copy-Item "README.md" "$pkg/README.md"
           & windeployqt --release --no-opengl-sw --no-system-d3d-compiler --no-quick-import --compiler-runtime --translations zh_CN "$pkg/SnapOCR.exe"
           if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
+          # 我们自己的界面翻译（snapocr_*.qm）也要打进发布包，否则英文 UI 不生效
+          if (Test-Path "build/translations") {
+            New-Item -ItemType Directory -Force -Path "$pkg/translations" | Out-Null
+            Copy-Item "build/translations/*.qm" "$pkg/translations/" -Force
+          }
           tar -a -c -f "dist/SnapOCR-$version-win64.zip" -C dist "SnapOCR-$version"
           Write-Host "packaged: dist/SnapOCR-$version-win64.zip"
           (Get-Item "dist/SnapOCR-$version-win64.zip").Length
