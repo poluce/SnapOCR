@@ -173,6 +173,21 @@ void drawAction(QPainter& painter, const QString& action)
         path.lineTo(QPointF(8, 15));
         path.lineTo(QPointF(16, 5));
         painter.drawPath(path);
+    } else if (action == QLatin1String("camera")) {
+        painter.drawRoundedRect(QRectF(2.5, 6.5, 15, 10), 2.5, 2.5);
+        painter.drawEllipse(QRectF(7.5, 9, 5, 5));
+        painter.drawLine(QPointF(6.5, 6.5), QPointF(8, 4));
+        painter.drawLine(QPointF(8, 4), QPointF(12, 4));
+        painter.drawLine(QPointF(12, 4), QPointF(13.5, 6.5));
+    } else if (action == QLatin1String("settings")) {
+        // 三条带滑块的设置线条
+        painter.drawLine(QPointF(3, 6), QPointF(17, 6));
+        painter.drawLine(QPointF(3, 12), QPointF(17, 12));
+        painter.drawLine(QPointF(3, 18), QPointF(17, 18));
+        painter.setBrush(QBrush(inkColor()));
+        painter.drawEllipse(QPointF(7, 6), 1.9, 1.9);
+        painter.drawEllipse(QPointF(13, 12), 1.9, 1.9);
+        painter.drawEllipse(QPointF(6, 18), 1.9, 1.9);
     } else if (action == QLatin1String("textedit")) {
         painter.drawRect(QRectF(4, 5, 12, 10));
         painter.drawLine(QPointF(7, 8), QPointF(13, 8));

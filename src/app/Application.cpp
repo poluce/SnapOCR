@@ -36,7 +36,6 @@
 #include "snapocr/Version.h"
 #include "ui/MainWindow.h"
 #include "ui/OcrResultDialog.h"
-#include "ui/SettingsDialog.h"
 #include "ui/Theme.h"
 
 namespace snapocr::app {
@@ -198,11 +197,12 @@ bool Application::initializeServices()
     }
 
     m_mainWindow = std::make_unique<ui::MainWindow>();
+    m_mainWindow->setSettings(m_settings);
     connect(m_mainWindow.get(), &ui::MainWindow::captureRequested, this,
             &Application::startCapture);
     connect(m_mainWindow.get(), &ui::MainWindow::ocrRequested, this, &Application::startOcrCapture);
-    connect(m_mainWindow.get(), &ui::MainWindow::settingsRequested, this,
-            &Application::showSettings);
+    connect(m_mainWindow.get(), &ui::MainWindow::settingsChanged, this,
+            [this](const common::AppSettings& changed) { applySettings(changed); });
     updateHotkeyLabels();
 
     annotate::AnnotationStyle initialStyle;
@@ -484,32 +484,49 @@ void Application::showMainWindow()
 
 void Application::showSettings()
 {
-    const common::AppSettings previous = m_settings;
-    // 保持父窗口（正确的模态与 z-order）；位置由 SettingsDialog::showEvent 夹取进屏幕。
-    ui::SettingsDialog dialog(m_settings, m_mainWindow.get());
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
+    // 设置已合并进主窗口：只需显示窗口并滚动到设置区域，改动即时生效。
+    showMainWindow();
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->revealSettings();
     }
+}
 
-    m_settings = dialog.settings();
+// 设置面板任何改动都会走这里：比较差异 -> 应用 -> 持久化。
+// 热键注册失败会回滚到旧值并提示（避免用户改成一个被占用的键后无法截图）。
+void Application::applySettings(const common::AppSettings& incoming)
+{
+    const common::AppSettings previous = m_settings;
+    m_settings = incoming;
 
-    // 热键变更：重新注册，失败时回滚到旧值。
     if (m_settings.captureHotkey != previous.captureHotkey
         || m_settings.ocrHotkey != previous.ocrHotkey) {
         QString error;
-        if (!m_hotkeys->registerHotkey(HotkeyManager::Action::Capture, m_settings.captureHotkey,
-                                       &error)) {
+        bool rollback = false;
+        if (m_settings.captureHotkey != previous.captureHotkey
+            && !m_hotkeys->registerHotkey(HotkeyManager::Action::Capture, m_settings.captureHotkey,
+                                          &error)) {
             showError(error);
             m_settings.captureHotkey = previous.captureHotkey;
+            rollback = true;
         }
-        if (!m_hotkeys->registerHotkey(HotkeyManager::Action::Ocr, m_settings.ocrHotkey, &error)) {
+        if (m_settings.ocrHotkey != previous.ocrHotkey
+            && !m_hotkeys->registerHotkey(HotkeyManager::Action::Ocr, m_settings.ocrHotkey,
+                                          &error)) {
             showError(error);
             m_settings.ocrHotkey = previous.ocrHotkey;
+            rollback = true;
         }
         // 保证两套热键最终都处于已注册状态。
         m_hotkeys->registerHotkey(HotkeyManager::Action::Capture, m_settings.captureHotkey, nullptr);
         m_hotkeys->registerHotkey(HotkeyManager::Action::Ocr, m_settings.ocrHotkey, nullptr);
         updateHotkeyLabels();
+        if (rollback) {
+            // 回滚后把面板显示值同步回真实值，避免界面与实际不一致。
+            if (m_mainWindow != nullptr) {
+                m_mainWindow->setSettings(m_settings);
+            }
+            return;
+        }
     }
 
     if (m_settings.theme != previous.theme) {
@@ -531,7 +548,9 @@ void Application::showSettings()
     style.color = m_settings.lastColor;
     style.width = m_settings.lastWidth;
     style.fontSize = m_settings.lastFontSize;
-    m_overlayController->setAnnotationStyle(style);
+    if (m_overlayController != nullptr) {
+        m_overlayController->setAnnotationStyle(style);
+    }
 
     persistSettings();
     if (m_mainWindow != nullptr) {

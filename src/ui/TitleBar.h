@@ -14,12 +14,15 @@ class TitleBar final : public QWidget
     Q_OBJECT
 
 public:
-    explicit TitleBar(const QString& title, QWidget* parent = nullptr);
+    // showMinimize / showClose：按窗口类型显示对应的系统按钮
+    explicit TitleBar(const QString& title, QWidget* parent = nullptr,
+                      bool showMinimize = false, bool showClose = true);
 
     void setTitle(const QString& title);
 
 signals:
     void closeRequested();
+    void minimizeRequested();
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
@@ -29,6 +32,7 @@ protected:
 private:
     QLabel* m_titleLabel = nullptr;
     QToolButton* m_closeButton = nullptr;
+    QToolButton* m_minimizeButton = nullptr;
 };
 
 }  // namespace snapocr::ui

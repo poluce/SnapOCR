@@ -66,6 +66,7 @@ private:
 
     void showMainWindow();
     void showSettings();
+    void applySettings(const snapocr::common::AppSettings& incoming);
     void quitApplication();
 
     void showInfo(const QString& message);

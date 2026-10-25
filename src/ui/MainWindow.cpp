@@ -1,104 +1,342 @@
 #include "ui/MainWindow.h"
 
 #include <QCloseEvent>
-#include <QFont>
-#include <QGridLayout>
+#include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QStatusBar>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QTimer>
 #include <QVBoxLayout>
-#include <QWidget>
 
 #include "snapocr/Version.h"
 #include "ui/AppIcon.h"
+#include "ui/SettingsPanel.h"
+#include "ui/TitleBar.h"
+#include "ui/ToolIcons.h"
 
 namespace snapocr::ui {
+namespace {
+
+constexpr int kShadowMargin = 16;
+constexpr int kWindowWidth = 640;
+
+}  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("SnapOCR"));
     setWindowIcon(ui::appIcon());
-    resize(560, 380);
-    setMinimumSize(460, 330);
+    // 无边框 + 自建标题栏，与设置窗口同一套视觉语言。
+    setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground, true);
 
-    auto* central = new QWidget(this);
-    auto* layout = new QVBoxLayout(central);
-    layout->setContentsMargins(24, 20, 24, 20);
-    layout->setSpacing(14);
+    buildUi();
+    applyStyleSheet();
+    setHotkeyTexts(QStringLiteral("F1"), QStringLiteral("F4"));
+}
 
-    auto* title = new QLabel(QStringLiteral("SnapOCR"), central);
-    QFont titleFont = title->font();
-    titleFont.setPointSize(20);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-    layout->addWidget(title);
+void MainWindow::buildUi()
+{
+    // QMainWindow 有自带的布局（central widget / dock / statusbar），
+    // 不能直接给它设 QLayout —— 那样内容不会被渲染。这里用一个透明容器
+    // 作为 central widget，再在里面做阴影边距。
+    auto* wrapper = new QWidget(this);
+    wrapper->setObjectName(QStringLiteral("windowWrapper"));
+    wrapper->setAttribute(Qt::WA_TranslucentBackground, true);
 
-    auto* subtitle = new QLabel(QStringLiteral("Windows 截图 · 标注 · 文字识别"), central);
-    subtitle->setEnabled(false);
-    layout->addWidget(subtitle);
+    auto* outer = new QVBoxLayout(wrapper);
+    outer->setContentsMargins(kShadowMargin, kShadowMargin, kShadowMargin, kShadowMargin);
+    outer->setSpacing(0);
 
-    auto* grid = new QGridLayout;
-    grid->setSpacing(12);
+    auto* surface = new QWidget(wrapper);
+    surface->setObjectName(QStringLiteral("windowSurface"));
+    surface->setAttribute(Qt::WA_StyledBackground, true);
+    outer->addWidget(surface);
 
-    m_captureButton = new QPushButton(QStringLiteral("截图"), central);
-    m_captureButton->setMinimumHeight(64);
-    m_ocrButton = new QPushButton(QStringLiteral("屏幕取字"), central);
-    m_ocrButton->setMinimumHeight(64);
-    m_settingsButton = new QPushButton(QStringLiteral("设置"), central);
-    m_settingsButton->setMinimumHeight(40);
+    auto* shadow = new QGraphicsDropShadowEffect(surface);
+    shadow->setBlurRadius(28);
+    shadow->setOffset(0, 6);
+    shadow->setColor(QColor(0, 0, 0, 60));
+    surface->setGraphicsEffect(shadow);
 
-    grid->addWidget(m_captureButton, 0, 0);
-    grid->addWidget(m_ocrButton, 0, 1);
-    grid->addWidget(m_settingsButton, 1, 0, 1, 2);
-    layout->addLayout(grid);
+    auto* surfaceLayout = new QVBoxLayout(surface);
+    surfaceLayout->setContentsMargins(0, 0, 0, 0);
+    surfaceLayout->setSpacing(0);
 
-    m_hotkeyLabel = new QLabel(central);
-    m_hotkeyLabel->setWordWrap(true);
-    layout->addWidget(m_hotkeyLabel);
+    m_titleBar = new TitleBar(QStringLiteral("SnapOCR"), surface, /*showMinimize=*/true,
+                              /*showClose=*/true);
+    surfaceLayout->addWidget(m_titleBar);
+    connect(m_titleBar, &TitleBar::closeRequested, this, &QWidget::close);
+    connect(m_titleBar, &TitleBar::minimizeRequested, this, &QWidget::showMinimized);
 
-    m_statusLabel = new QLabel(central);
-    m_statusLabel->setWordWrap(true);
-    m_statusLabel->setEnabled(false);
-    layout->addWidget(m_statusLabel);
+    // ---- 可滚动内容 ----
+    m_scroll = new QScrollArea(surface);
+    m_scroll->setObjectName(QStringLiteral("contentScroll"));
+    m_scroll->setWidgetResizable(true);
+    m_scroll->setFrameShape(QFrame::NoFrame);
+    m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-    layout->addStretch(1);
+    auto* content = new QWidget(m_scroll);
+    content->setObjectName(QStringLiteral("contentArea"));
+    auto* contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(22, 18, 22, 10);
+    contentLayout->setSpacing(16);
 
-    auto* hint = new QLabel(
-        QStringLiteral("截图后可在选区工具条上标注、复制、保存或提取文字。关闭窗口将隐藏到托盘，"
-                       "托盘菜单可退出。"),
-        central);
-    hint->setWordWrap(true);
-    hint->setEnabled(false);
-    layout->addWidget(hint);
+    // ---- 品牌头部 ----
+    auto* header = new QWidget(content);
+    auto* headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(14);
 
-    setCentralWidget(central);
+    auto* iconLabel = new QLabel(header);
+    iconLabel->setPixmap(ui::appIcon().pixmap(40, 40));
+    iconLabel->setFixedSize(40, 40);
+    headerLayout->addWidget(iconLabel, 0, Qt::AlignTop);
+
+    auto* titleColumn = new QVBoxLayout;
+    titleColumn->setContentsMargins(0, 0, 0, 0);
+    titleColumn->setSpacing(2);
+    auto* nameLabel = new QLabel(QStringLiteral("SnapOCR"), header);
+    nameLabel->setObjectName(QStringLiteral("appName"));
+    auto* descLabel = new QLabel(QStringLiteral("Windows 截图 · 标注 · 文字识别"), header);
+    descLabel->setObjectName(QStringLiteral("appDesc"));
+    titleColumn->addWidget(nameLabel);
+    titleColumn->addWidget(descLabel);
+    headerLayout->addLayout(titleColumn, 1);
+
+    auto* versionLabel =
+        new QLabel(QStringLiteral("v%1").arg(QString::fromUtf8(snapocr::version::kVersion)), header);
+    versionLabel->setObjectName(QStringLiteral("versionBadge"));
+    headerLayout->addWidget(versionLabel, 0, Qt::AlignTop);
+    contentLayout->addWidget(header);
+
+    // ---- 操作卡片 ----
+    auto* actions = new QWidget(content);
+    auto* actionsLayout = new QHBoxLayout(actions);
+    actionsLayout->setContentsMargins(0, 0, 0, 0);
+    actionsLayout->setSpacing(12);
+
+    m_captureButton = makeActionCard(QStringLiteral("camera"), QStringLiteral("截图"),
+                                     QStringLiteral("框选屏幕区域，标注后复制或保存"),
+                                     &m_captureHotkeyBadge, actions);
+    m_ocrButton = makeActionCard(QStringLiteral("ocr"), QStringLiteral("屏幕取字"),
+                                 QStringLiteral("框选区域直接识别文字并复制"),
+                                 &m_ocrHotkeyBadge, actions);
+    actionsLayout->addWidget(m_captureButton, 1);
+    actionsLayout->addWidget(m_ocrButton, 1);
+    contentLayout->addWidget(actions);
 
     connect(m_captureButton, &QPushButton::clicked, this, &MainWindow::captureRequested);
     connect(m_ocrButton, &QPushButton::clicked, this, &MainWindow::ocrRequested);
-    connect(m_settingsButton, &QPushButton::clicked, this, &MainWindow::settingsRequested);
 
-    setHotkeyTexts(QStringLiteral("F1"), QStringLiteral("F4"));
-    statusBar()->showMessage(
-        QStringLiteral("版本 %1").arg(QString::fromUtf8(snapocr::version::kVersion)));
+    // ---- 提示 ----
+    auto* tips = new QWidget(content);
+    tips->setObjectName(QStringLiteral("tipsCard"));
+    tips->setAttribute(Qt::WA_StyledBackground, true);
+    auto* tipsLayout = new QVBoxLayout(tips);
+    tipsLayout->setContentsMargins(14, 10, 14, 10);
+    tipsLayout->setSpacing(6);
+    tipsLayout->addWidget(makeTip(QStringLiteral("confirm"),
+                                  QStringLiteral("截图后：Enter 复制 · Ctrl+S 保存 · Esc 取消"),
+                                  tips));
+    tipsLayout->addWidget(makeTip(QStringLiteral("settings"),
+                                  QStringLiteral("关闭窗口会隐藏到托盘，右键托盘图标可退出"),
+                                  tips));
+    contentLayout->addWidget(tips);
+
+    // ---- 设置（同一窗口内） ----
+    auto* settingsSection = new QWidget(content);
+    m_settingsSection = settingsSection;
+    auto* settingsLayout = new QVBoxLayout(settingsSection);
+    settingsLayout->setContentsMargins(0, 6, 0, 0);
+    settingsLayout->setSpacing(8);
+    auto* settingsTitle = new QLabel(QStringLiteral("设置"), settingsSection);
+    settingsTitle->setObjectName(QStringLiteral("sectionTitle"));
+    settingsLayout->addWidget(settingsTitle);
+    m_settingsPanel = new SettingsPanel(settingsSection);
+    settingsLayout->addWidget(m_settingsPanel);
+    contentLayout->addWidget(settingsSection);
+
+    connect(m_settingsPanel, &SettingsPanel::settingsChanged, this, &MainWindow::settingsChanged);
+
+    connect(m_settingsPanel, &SettingsPanel::settingsChanged, this, &MainWindow::settingsChanged);
+
+    contentLayout->addStretch(1);
+
+    // ---- 底部状态 ----
+    auto* footer = new QWidget(content);
+    auto* footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(0, 0, 0, 0);
+    footerLayout->setSpacing(8);
+    m_statusLabel = new QLabel(QStringLiteral("就绪"), footer);
+    m_statusLabel->setObjectName(QStringLiteral("statusLabel"));
+    footerLayout->addWidget(m_statusLabel, 1);
+    contentLayout->addWidget(footer);
+
+    m_scroll->setWidget(content);
+    surfaceLayout->addWidget(m_scroll, 1);
+
+    setCentralWidget(wrapper);
+
+    setFixedWidth(kWindowWidth + kShadowMargin * 2);
+    setMinimumHeight(420);
+    resize(kWindowWidth + kShadowMargin * 2, 720);
+}
+
+QPushButton* MainWindow::makeActionCard(const QString& iconAction, const QString& title,
+                                        const QString& hint, QLabel** hotkeyBadge, QWidget* parent)
+{
+    auto* card = new QPushButton(parent);
+    card->setObjectName(QStringLiteral("actionCard"));
+    card->setCursor(Qt::PointingHandCursor);
+    card->setMinimumHeight(92);
+
+    auto* layout = new QHBoxLayout(card);
+    layout->setContentsMargins(16, 14, 16, 14);
+    layout->setSpacing(14);
+
+    auto* iconLabel = new QLabel(card);
+    iconLabel->setPixmap(ui::actionIcon(iconAction, QColor(0x1F, 0x6F, 0xEB)).pixmap(QSize(26, 26), 2.0));
+    iconLabel->setFixedSize(26, 26);
+    iconLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    layout->addWidget(iconLabel, 0, Qt::AlignTop);
+
+    auto* textColumn = new QVBoxLayout;
+    textColumn->setContentsMargins(0, 0, 0, 0);
+    textColumn->setSpacing(2);
+    auto* titleLabel = new QLabel(title, card);
+    titleLabel->setObjectName(QStringLiteral("actionTitle"));
+    titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto* hintLabel = new QLabel(hint, card);
+    hintLabel->setObjectName(QStringLiteral("actionHint"));
+    hintLabel->setWordWrap(true);
+    hintLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    textColumn->addWidget(titleLabel);
+    textColumn->addWidget(hintLabel);
+    layout->addLayout(textColumn, 1);
+
+    auto* badge = new QLabel(card);
+    badge->setObjectName(QStringLiteral("hotkeyBadge"));
+    badge->setAttribute(Qt::WA_TransparentForMouseEvents);
+    layout->addWidget(badge, 0, Qt::AlignTop);
+    if (hotkeyBadge != nullptr) {
+        *hotkeyBadge = badge;
+    }
+    return card;
+}
+
+QWidget* MainWindow::makeTip(const QString& iconAction, const QString& text, QWidget* parent)
+{
+    auto* row = new QWidget(parent);
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+
+    auto* iconLabel = new QLabel(row);
+    iconLabel->setPixmap(
+        ui::actionIcon(iconAction, QColor(0x8A, 0x90, 0x99)).pixmap(QSize(14, 14), 2.0));
+    iconLabel->setFixedSize(14, 14);
+    layout->addWidget(iconLabel, 0, Qt::AlignVCenter);
+
+    auto* textLabel = new QLabel(text, row);
+    textLabel->setObjectName(QStringLiteral("tipText"));
+    textLabel->setWordWrap(true);
+    layout->addWidget(textLabel, 1);
+    return row;
+}
+
+void MainWindow::applyStyleSheet()
+{
+    setStyleSheet(QStringLiteral(R"(
+QWidget#windowSurface {
+    background: #F7F8FA; border: 1px solid #E1E5EB; border-radius: 12px;
+}
+QWidget#titleBar { background: #FFFFFF; border-top-left-radius: 12px; border-top-right-radius: 12px; }
+QLabel#titleBarText { color: #1F2328; font-size: 13px; font-weight: 600; }
+QToolButton#titleBarButton {
+    border: none; border-radius: 6px; color: #5B6270; font-size: 15px;
+}
+QToolButton#titleBarButton:hover { background: #EDF0F4; }
+QToolButton#titleBarClose {
+    border: none; border-radius: 6px; color: #5B6270; font-size: 14px;
+}
+QToolButton#titleBarClose:hover { background: #E8464A; color: #FFFFFF; }
+
+QScrollArea#contentScroll { background: transparent; border: none; }
+QWidget#contentArea { background: transparent; }
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: #D2D7DF; border-radius: 5px; min-height: 30px; }
+QScrollBar::handle:vertical:hover { background: #BFC6D0; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+
+QLabel#appName { color: #12161B; font-size: 20px; font-weight: 700; }
+QLabel#appDesc { color: #7A818B; font-size: 12px; }
+QLabel#versionBadge {
+    color: #6B7280; background: #ECEEF2; border-radius: 9px;
+    padding: 2px 9px; font-size: 11px;
+}
+
+QPushButton#actionCard {
+    background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 12px; text-align: left;
+}
+QPushButton#actionCard:hover { border-color: #C7D6F5; background: #FBFCFF; }
+QPushButton#actionCard:pressed { background: #F3F7FE; }
+QLabel#actionTitle { color: #12161B; font-size: 15px; font-weight: 600; }
+QLabel#actionHint { color: #7A818B; font-size: 12px; }
+QLabel#hotkeyBadge {
+    color: #1F6FEB; background: #EAF1FD; border-radius: 7px;
+    padding: 2px 8px; font-size: 11px; font-weight: 600;
+}
+
+QWidget#tipsCard { background: #F1F3F6; border-radius: 10px; }
+QLabel#tipText { color: #6B7280; font-size: 12px; }
+QLabel#sectionTitle { color: #12161B; font-size: 15px; font-weight: 600; }
+QLabel#statusLabel { color: #8A9099; font-size: 12px; }
+)"));
 }
 
 void MainWindow::setHotkeyTexts(const QString& captureText, const QString& ocrText)
 {
-    m_captureButton->setText(
-        QStringLiteral("截图（%1）").arg(captureText.isEmpty() ? QStringLiteral("F1") : captureText));
-    m_ocrButton->setText(QStringLiteral("屏幕取字（%1）")
-                             .arg(ocrText.isEmpty() ? QStringLiteral("F4") : ocrText));
-    m_hotkeyLabel->setText(QStringLiteral("全局热键：%1 截图 / %2 取字（可在设置中修改）")
-                               .arg(captureText.isEmpty() ? QStringLiteral("F1") : captureText,
-                                    ocrText.isEmpty() ? QStringLiteral("F4") : ocrText));
+    const QString capture = captureText.isEmpty() ? QStringLiteral("F1") : captureText;
+    const QString ocr = ocrText.isEmpty() ? QStringLiteral("F4") : ocrText;
+    if (m_captureHotkeyBadge != nullptr) {
+        m_captureHotkeyBadge->setText(capture);
+    }
+    if (m_ocrHotkeyBadge != nullptr) {
+        m_ocrHotkeyBadge->setText(ocr);
+    }
 }
 
 void MainWindow::setStatusText(const QString& text)
 {
-    m_statusLabel->setText(text);
-    statusBar()->showMessage(text, 5000);
+    if (m_statusLabel != nullptr) {
+        m_statusLabel->setText(text);
+    }
+}
+
+void MainWindow::setSettings(const common::AppSettings& settings)
+{
+    if (m_settingsPanel != nullptr) {
+        m_settingsPanel->setSettings(settings);
+    }
+}
+
+void MainWindow::revealSettings()
+{
+    if (m_scroll == nullptr || m_settingsSection == nullptr) {
+        return;
+    }
+    // 等布局完成后再滚动，否则拿到的是旧的最大值。
+    QTimer::singleShot(0, this, [this]() {
+        m_scroll->ensureWidgetVisible(m_settingsSection, 0, 0);
+        if (QScrollBar* bar = m_scroll->verticalScrollBar()) {
+            bar->setValue(m_settingsSection->y());
+        }
+    });
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

@@ -12,7 +12,7 @@
 
 namespace snapocr::ui {
 
-TitleBar::TitleBar(const QString& title, QWidget* parent)
+TitleBar::TitleBar(const QString& title, QWidget* parent, bool showMinimize, bool showClose)
     : QWidget(parent)
 {
     setObjectName(QStringLiteral("titleBar"));
@@ -36,14 +36,27 @@ TitleBar::TitleBar(const QString& title, QWidget* parent)
     layout->addWidget(m_titleLabel);
     layout->addStretch(1);
 
-    m_closeButton = new QToolButton(this);
-    m_closeButton->setObjectName(QStringLiteral("titleBarClose"));
-    m_closeButton->setText(QStringLiteral("\u2715"));
-    m_closeButton->setToolTip(QStringLiteral("关闭"));
-    m_closeButton->setCursor(Qt::ArrowCursor);
-    m_closeButton->setFixedSize(32, 28);
-    layout->addWidget(m_closeButton);
-    connect(m_closeButton, &QToolButton::clicked, this, &TitleBar::closeRequested);
+    if (showMinimize) {
+        m_minimizeButton = new QToolButton(this);
+        m_minimizeButton->setObjectName(QStringLiteral("titleBarButton"));
+        m_minimizeButton->setText(QStringLiteral("\u2013"));
+        m_minimizeButton->setToolTip(QStringLiteral("最小化"));
+        m_minimizeButton->setCursor(Qt::ArrowCursor);
+        m_minimizeButton->setFixedSize(32, 28);
+        layout->addWidget(m_minimizeButton);
+        connect(m_minimizeButton, &QToolButton::clicked, this, &TitleBar::minimizeRequested);
+    }
+
+    if (showClose) {
+        m_closeButton = new QToolButton(this);
+        m_closeButton->setObjectName(QStringLiteral("titleBarClose"));
+        m_closeButton->setText(QStringLiteral("\u2715"));
+        m_closeButton->setToolTip(QStringLiteral("关闭到托盘"));
+        m_closeButton->setCursor(Qt::ArrowCursor);
+        m_closeButton->setFixedSize(32, 28);
+        layout->addWidget(m_closeButton);
+        connect(m_closeButton, &QToolButton::clicked, this, &TitleBar::closeRequested);
+    }
 }
 
 void TitleBar::setTitle(const QString& title)
