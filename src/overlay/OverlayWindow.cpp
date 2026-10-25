@@ -203,6 +203,16 @@ void OverlayWindow::mousePressEvent(QMouseEvent* event)
         return;
     }
 
+    // F-SYS-12：Ctrl+左键拖动选区 → 把截好的图直接拖到资源管理器/IM。
+    // 裁剪交给控制器（它持有完整多屏捕获结果，跨屏选区才正确）。
+    if (event->modifiers().testFlag(Qt::ControlModifier) && m_selection->hasUsableSelection()) {
+        const QRect selection = m_selection->rect();
+        if (selection.contains(physical)) {
+            emit dragOutRequested(selection);
+            return;
+        }
+    }
+
     if (m_selection->isActive() && m_selection->hasUsableSelection()) {
         const SelectionModel::Handle handle = m_selection->hitTest(physical, handleSize);
         if (handle == SelectionModel::Handle::Inside) {

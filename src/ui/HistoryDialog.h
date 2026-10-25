@@ -8,6 +8,7 @@
 
 class QLabel;
 class QListWidget;
+class QMimeData;
 class QPushButton;
 
 namespace snapocr::ui {

@@ -47,6 +47,8 @@ signals:
     void cancelled();
     void saveRequested();
     void copyRequested();
+    // F-SYS-12：Ctrl+拖拽把选区拖到资源管理器/IM（控制器负责裁剪）
+    void dragOutRequested(const QRect& physicalSelection);
     // 取色：用户在覆盖层里按 C 复制当前像素颜色
     void colorCopyRequested(const QColor& color);
 

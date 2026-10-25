@@ -30,6 +30,7 @@ signals:
     void captureRequested();
     void ocrRequested();
     void historyRequested();
+    void pinLatestRequested();
     void settingsRequested();
     void showMainRequested();
     void quitRequested();

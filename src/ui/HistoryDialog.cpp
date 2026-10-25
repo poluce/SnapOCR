@@ -7,10 +7,28 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
+#include "ui/ImageDrag.h"
 #include "ui/Theme.h"
 
 namespace snapocr::ui {
 namespace {
+
+// 缩略图列表：拖到资源管理器/IM 时给出文件 URL（F-SYS-12）
+class HistoryListWidget final : public QListWidget
+{
+public:
+    using QListWidget::QListWidget;
+
+protected:
+    QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override
+    {
+        if (items.isEmpty()) {
+            return nullptr;
+        }
+        const QString path = items.first()->data(Qt::UserRole).toString();
+        return ui::fileMimeData(path);
+    }
+};
 
 constexpr int kThumbWidth = 168;
 constexpr int kThumbHeight = 104;
@@ -40,7 +58,7 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
     header->setObjectName(QStringLiteral("historyHeader"));
     layout->addWidget(header);
 
-    m_list = new QListWidget(this);
+    m_list = new HistoryListWidget(this);
     m_list->setObjectName(QStringLiteral("historyList"));
     m_list->setViewMode(QListView::IconMode);
     m_list->setIconSize(QSize(kThumbWidth, kThumbHeight));
@@ -50,6 +68,9 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
     m_list->setSpacing(6);
     m_list->setUniformItemSizes(true);
     m_list->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_list->setDragEnabled(true);
+    m_list->setDragDropMode(QAbstractItemView::DragOnly);
+    m_list->setDefaultDropAction(Qt::CopyAction);
     layout->addWidget(m_list, 1);
 
     m_emptyHint = new QLabel(QStringLiteral("还没有历史截图：完成一次截图（复制/保存/贴图）后就会出现在这里"), this);
@@ -122,6 +143,7 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
     refresh();
 }
 
+
 void HistoryDialog::refresh()
 {
     const QVector<history::HistoryEntry> entries =
@@ -137,7 +159,8 @@ void HistoryDialog::refresh()
                                              .arg(entry.capturedAt.toString(QStringLiteral("MM-dd HH:mm:ss")))
                                              .arg(entry.size.width())
                                              .arg(entry.size.height()));
-        item->setData(Qt::UserRole, entry.id);
+        item->setData(Qt::UserRole, entry.filePath);
+        item->setData(Qt::UserRole + 1, entry.id);
         item->setToolTip(entry.filePath);
         m_list->addItem(item);
     }
@@ -158,7 +181,7 @@ history::HistoryEntry HistoryDialog::currentEntry() const
     if (item == nullptr || m_store == nullptr) {
         return entry;
     }
-    const QString id = item->data(Qt::UserRole).toString();
+    const QString id = item->data(Qt::UserRole + 1).toString();
     for (const history::HistoryEntry& candidate : m_store->entries()) {
         if (candidate.id == id) {
             return candidate;

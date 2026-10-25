@@ -14,6 +14,7 @@
 #include <QWindow>
 
 #include "platform/win32/WindowActivation.h"
+#include "ui/ImageDrag.h"
 
 namespace snapocr::ui {
 namespace {
@@ -122,6 +123,12 @@ void PinWindow::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) {
         QWidget::mousePressEvent(event);
+        return;
+    }
+    // F-SYS-12：Ctrl+左键把贴图拖到资源管理器/IM；普通左键仍是移动窗口
+    if (event->modifiers().testFlag(Qt::ControlModifier)) {
+        ui::startImageDrag(this, m_image);
+        event->accept();
         return;
     }
     if (QWindow* handle = windowHandle()) {

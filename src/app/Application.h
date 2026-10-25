@@ -82,6 +82,8 @@ private:
     void onCopyRequested(const QImage& image);
     void pinImage(const QImage& image);
     void showHistory();
+    // 托盘「贴图最近一张」：取历史里最新一张贴到屏幕
+    void pinLatestFromHistory();
     // 滚动长截图（F-CAP-16）
     void startScrollingCapture(const QRect& physicalRect);
     void finishScrollingCapture();

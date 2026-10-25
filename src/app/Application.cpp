@@ -236,6 +236,8 @@ bool Application::initializeServices()
     connect(m_tray, &TrayController::captureRequested, this, &Application::startCapture);
     connect(m_tray, &TrayController::ocrRequested, this, &Application::startOcrCapture);
     connect(m_tray, &TrayController::historyRequested, this, &Application::showHistory);
+    connect(m_tray, &TrayController::pinLatestRequested, this,
+            &Application::pinLatestFromHistory);
     connect(m_tray, &TrayController::settingsRequested, this, &Application::showSettings);
     connect(m_tray, &TrayController::showMainRequested, this, &Application::showMainWindow);
     connect(m_tray, &TrayController::quitRequested, this, &Application::quitApplication);
@@ -646,6 +648,24 @@ void Application::cancelScrollingCapture()
     }
     registerOverlayHotkeys(false);
     showInfo(QStringLiteral("已取消长截图"));
+}
+
+void Application::pinLatestFromHistory()
+{
+    if (m_history == nullptr) {
+        return;
+    }
+    const QVector<history::HistoryEntry> entries = m_history->entries();
+    if (entries.isEmpty()) {
+        showInfo(QStringLiteral("还没有历史截图：先截一张再试"));
+        return;
+    }
+    const QImage image = m_history->load(entries.first());
+    if (image.isNull()) {
+        showError(QStringLiteral("历史截图读取失败"));
+        return;
+    }
+    pinImage(image);
 }
 
 void Application::showHistory()

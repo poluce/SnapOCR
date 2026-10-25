@@ -85,6 +85,7 @@ private:
     void requestCopy();
     void requestPin();
     void requestScrolling();
+    void handleDragOut(const QRect& physicalSelection);
     // 选区是否贴到虚拟桌面边缘（OCR 裁边提示用，见 F-OCR-09）
 
     void updateMagnifierFromCursor();

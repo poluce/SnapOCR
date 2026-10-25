@@ -1,5 +1,7 @@
 #include "overlay/OverlayController.h"
 
+#include "ui/ImageDrag.h"
+
 #include "ocr/OcrHints.h"
 
 #include <QApplication>
@@ -195,6 +197,8 @@ void OverlayController::buildOverlays()
         connect(window, &OverlayWindow::selectionConfirmed, this,
                 &OverlayController::requestCopy);
         connect(window, &OverlayWindow::saveRequested, this, &OverlayController::requestSave);
+        connect(window, &OverlayWindow::dragOutRequested, this,
+                &OverlayController::handleDragOut);
         connect(window, &OverlayWindow::colorCopyRequested, this,
                 [this](const QColor& color) { emit colorPicked(color.name(QColor::HexRgb).toUpper()); });
         connect(window, &OverlayWindow::copyRequested, this, &OverlayController::requestCopy);
@@ -528,6 +532,18 @@ bool OverlayController::lastSelectionTouchesScreenEdge() const
     }
     // 选区与虚拟桌面都用逻辑坐标，直接比较边界即可
     return ocr::selectionTouchesScreenEdge(selection, m_virtualLogicalDesktop);
+}
+
+void OverlayController::handleDragOut(const QRect& physicalSelection)
+{
+    if (physicalSelection.isEmpty()) {
+        return;
+    }
+    const QImage image = capture::cropSelection(m_result, physicalSelection);
+    if (image.isNull()) {
+        return;
+    }
+    ui::startImageDrag(m_overlays.isEmpty() ? nullptr : m_overlays.first(), image);
 }
 
 void OverlayController::requestScrolling()
