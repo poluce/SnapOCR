@@ -164,6 +164,16 @@ bool Application::initializeServices()
             &Application::runOcr);
     connect(m_overlayController, &overlay::OverlayController::errorOccurred, this,
             &Application::onCaptureError);
+    connect(m_overlayController, &overlay::OverlayController::colorPicked, this,
+            [this](const QString& hex) {
+                QString error;
+                if (platform::win32::copyTextToClipboard(hex, &error)) {
+                    showInfo(QStringLiteral("已复制颜色 %1").arg(hex));
+                } else {
+                    showError(QStringLiteral("复制颜色失败：%1").arg(error));
+                }
+            });
+
     connect(m_overlayController, &overlay::OverlayController::started, this, [this]() {
         registerOverlayHotkeys(true);
     });

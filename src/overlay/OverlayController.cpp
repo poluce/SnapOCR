@@ -1,6 +1,7 @@
 #include "overlay/OverlayController.h"
 
 #include <QApplication>
+#include <QCursor>
 #include <QTimer>
 
 #include <QGuiApplication>
@@ -34,6 +35,53 @@ OverlayController::~OverlayController()
 void OverlayController::setAnnotationStyle(const annotate::AnnotationStyle& style)
 {
     m_style = style;
+}
+
+// 放大镜：每 50ms 查询一次光标位置。覆盖层只有在拖拽（有鼠标捕获）时才会收到
+// 鼠标移动事件，靠事件驱动会导致“不拖拽时就看不到放大镜”。
+void OverlayController::startMagnifierPolling()
+{
+    if (m_magnifierTimer == nullptr) {
+        m_magnifierTimer = new QTimer(this);
+        m_magnifierTimer->setInterval(50);
+        connect(m_magnifierTimer, &QTimer::timeout, this,
+                &OverlayController::updateMagnifierFromCursor);
+    }
+    m_magnifierTimer->start();
+}
+
+void OverlayController::stopMagnifierPolling()
+{
+    if (m_magnifierTimer != nullptr) {
+        m_magnifierTimer->stop();
+    }
+    for (OverlayWindow* window : m_overlays) {
+        if (window != nullptr) {
+            window->hideMagnifier();
+        }
+    }
+}
+
+void OverlayController::updateMagnifierFromCursor()
+{
+    if (!m_active || m_ocrMode || m_overlays.isEmpty()) {
+        return;
+    }
+    const QPoint globalLogical = QCursor::pos();
+    for (OverlayWindow* window : m_overlays) {
+        if (window == nullptr || !window->isSelectionInteractive()) {
+            continue;
+        }
+        if (window->monitor().logicalGeometry.contains(globalLogical)) {
+            window->showMagnifierAt(globalLogical);
+            return;
+        }
+    }
+    for (OverlayWindow* window : m_overlays) {
+        if (window != nullptr) {
+            window->hideMagnifier();
+        }
+    }
 }
 
 void OverlayController::setIncludeCursor(bool include)
@@ -111,6 +159,7 @@ void OverlayController::onCaptured(const capture::CaptureResult& result)
 
     m_active = true;
     buildOverlays();
+    startMagnifierPolling();
     emit started();
     showToolbar();
     hideToolbar();  // 先隐藏，等选区出现再显示
@@ -129,6 +178,8 @@ void OverlayController::buildOverlays()
         connect(window, &OverlayWindow::selectionConfirmed, this,
                 &OverlayController::requestCopy);
         connect(window, &OverlayWindow::saveRequested, this, &OverlayController::requestSave);
+        connect(window, &OverlayWindow::colorCopyRequested, this,
+                [this](const QColor& color) { emit colorPicked(color.name(QColor::HexRgb).toUpper()); });
         connect(window, &OverlayWindow::copyRequested, this, &OverlayController::requestCopy);
         connect(window, &OverlayWindow::cancelled, this, &OverlayController::cancel);
         window->show();
@@ -476,6 +527,7 @@ void OverlayController::focusOverlay()
 
 void OverlayController::finish()
 {
+    stopMagnifierPolling();
     if (m_editor != nullptr) {
         m_editor->hide();
         m_editor->deleteLater();

@@ -1,5 +1,7 @@
 #include "overlay/OverlayWindow.h"
 
+#include "overlay/ColorMagnifier.h"
+
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -32,6 +34,7 @@ OverlayWindow::OverlayWindow(const capture::ScreenFrame& frame,
     setAttribute(Qt::WA_DeleteOnClose, false);
     setAttribute(Qt::WA_NoSystemBackground, true);
     setMouseTracking(true);
+
     setFocusPolicy(Qt::StrongFocus);
     setCursor(Qt::CrossCursor);
     setWindowTitle(QStringLiteral("SnapOCR Overlay"));
@@ -84,6 +87,9 @@ void OverlayWindow::paintEvent(QPaintEvent* event)
 
     // 2. 暗化遮罩
     painter.fillRect(rect(), QColor(0, 0, 0, static_cast<int>(kDimAlpha)));
+
+    // 3. 像素放大镜（无选区时也要显示：取色与选区无关）
+    paintMagnifier(painter);
 
     const QRectF selectionLocal = selectionInLocal();
     if (selectionLocal.isEmpty()) {
@@ -169,6 +175,7 @@ void OverlayWindow::mousePressEvent(QMouseEvent* event)
         return;
     }
 
+    m_magnifierVisible = false;
     const QPoint physical = physicalFromGlobal(event->globalPosition());
     const int handleSize = qRound(kHandleSizeLogical * m_frame.monitor.devicePixelRatio);
 
@@ -251,6 +258,35 @@ void OverlayWindow::mouseMoveEvent(QMouseEvent* event)
     }
 }
 
+void OverlayWindow::showMagnifierAt(const QPoint& globalLogical)
+{
+    if (!m_interactive || !rect().contains(globalLogical)) {
+        m_magnifierVisible = false;
+        return;
+    }
+    m_magnifierVisible = true;
+    m_magnifierCursorLogical = globalLogical;
+    m_magnifierSamplePhysical = physicalFromGlobal(QPointF(globalLogical));
+    update();
+}
+
+void OverlayWindow::hideMagnifier()
+{
+    if (m_magnifierVisible) {
+        m_magnifierVisible = false;
+        update();
+    }
+}
+
+void OverlayWindow::paintMagnifier(QPainter& painter)
+{
+    if (!m_magnifierVisible) {
+        return;
+    }
+    const QRectF panel = ColorMagnifier::panelRect(m_magnifierCursorLogical, size());
+    ColorMagnifier::paint(painter, panel, m_frame.image, m_magnifierSamplePhysical);
+}
+
 void OverlayWindow::mouseReleaseEvent(QMouseEvent* event)
 {
     if (!m_interactive || event->button() != Qt::LeftButton) {
@@ -296,6 +332,16 @@ void OverlayWindow::keyPressEvent(QKeyEvent* event)
     }
 
     switch (event->key()) {
+    case Qt::Key_C: {
+        if (event->modifiers().testFlag(Qt::ControlModifier)) {
+            emit copyRequested();  // Ctrl+C：复制整张选区
+            return;
+        }
+        // 单独 C：取色，把当前像素颜色复制到剪贴板
+        emit colorCopyRequested(
+            ColorMagnifier::sampleColor(m_frame.image, m_magnifierSamplePhysical));
+        return;
+    }
     case Qt::Key_Escape:
         emit cancelled();
         return;
@@ -308,12 +354,6 @@ void OverlayWindow::keyPressEvent(QKeyEvent* event)
     case Qt::Key_S:
         if (event->modifiers().testFlag(Qt::ControlModifier)) {
             emit saveRequested();
-            return;
-        }
-        break;
-    case Qt::Key_C:
-        if (event->modifiers().testFlag(Qt::ControlModifier)) {
-            emit copyRequested();
             return;
         }
         break;

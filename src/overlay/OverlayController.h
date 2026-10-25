@@ -49,6 +49,7 @@ public:
 signals:
     void started();
     void copyRequested(const QImage& image);
+    void colorPicked(const QString& hex);
     void saveRequested(const QImage& image);
     void ocrRequested(const QImage& image);
     void finished();
@@ -75,6 +76,7 @@ private:
     QImage croppedSelection() const;
 
     void requestCopy();
+    void updateMagnifierFromCursor();
     void finishPendingTextInput();
     void requestSave();
     void requestOcr();
@@ -83,6 +85,13 @@ private:
 
     capture::CaptureService* m_captureService = nullptr;
     bool m_includeCursor = false;
+    QTimer* m_magnifierTimer = nullptr;
+
+private:
+    void startMagnifierPolling();
+    void stopMagnifierPolling();
+
+public:
     capture::CaptureResult m_result;
     QVector<capture::MonitorInfo> m_monitors;
     SelectionModel m_selection;

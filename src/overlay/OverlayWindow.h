@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QVector>
 #include <QWidget>
 
@@ -7,6 +8,7 @@
 #include "overlay/SelectionModel.h"
 
 namespace snapocr::overlay {
+
 
 // 单显示器覆盖层：显示冻结画面 + 暗化 + 选区交互。
 // 每块屏一个窗口，保证混合 DPI 下不整体缩放；坐标统一走物理像素换算。
@@ -27,6 +29,10 @@ public:
     // 重新绘制（选区变化时由控制器调用）。
     void refresh();
 
+    // 放大镜：控制器轮询光标位置驱动（不依赖鼠标移动事件）。
+    void showMagnifierAt(const QPoint& globalLogical);
+    void hideMagnifier();
+
 signals:
     void selectionChanged();
     void selectionReleased();
@@ -34,6 +40,8 @@ signals:
     void cancelled();
     void saveRequested();
     void copyRequested();
+    // 取色：用户在覆盖层里按 C 复制当前像素颜色
+    void colorCopyRequested(const QColor& color);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -47,6 +55,7 @@ private:
     QPoint physicalFromGlobal(const QPointF& globalLogical) const;
     QRectF selectionInLocal() const;
     void paintHud(QPainter& painter, const QRectF& selectionLocal);
+    void paintMagnifier(QPainter& painter);
 
     capture::ScreenFrame m_frame;
     const QVector<capture::MonitorInfo>* m_monitors = nullptr;
@@ -54,6 +63,10 @@ private:
     bool m_interactive = true;
     bool m_dragging = false;
     SelectionModel::Handle m_activeHandle = SelectionModel::Handle::None;
+    // 放大镜状态（位置/取样点/是否显示）
+    bool m_magnifierVisible = false;
+    QPoint m_magnifierCursorLogical;
+    QPoint m_magnifierSamplePhysical;
 };
 
 }  // namespace snapocr::overlay
