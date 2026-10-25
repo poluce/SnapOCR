@@ -96,8 +96,13 @@ void MainWindow::buildUi()
     contentLayout->addWidget(m_captureButton);
     contentLayout->addWidget(m_ocrButton);
 
+    m_historyButton = makeActionCard(QStringLiteral("history"), QStringLiteral("截图历史"),
+                                     nullptr, content);
+    contentLayout->addWidget(m_historyButton);
+
     connect(m_captureButton, &QPushButton::clicked, this, &MainWindow::captureRequested);
     connect(m_ocrButton, &QPushButton::clicked, this, &MainWindow::ocrRequested);
+    connect(m_historyButton, &QPushButton::clicked, this, &MainWindow::historyRequested);
 
     // ---- 设置（同一窗口内） ----
     auto* settingsSection = new QWidget(content);

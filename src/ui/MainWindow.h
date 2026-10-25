@@ -32,6 +32,7 @@ public:
 signals:
     void captureRequested();
     void ocrRequested();
+    void historyRequested();
     void settingsChanged(const snapocr::common::AppSettings& settings);
 
 protected:
@@ -45,6 +46,7 @@ private:
                                 QLabel** hotkeyBadge, QWidget* parent);
 
     QPushButton* m_captureButton = nullptr;
+    QPushButton* m_historyButton = nullptr;
     QPushButton* m_ocrButton = nullptr;
     QLabel* m_captureHotkeyBadge = nullptr;
     QLabel* m_ocrHotkeyBadge = nullptr;

@@ -19,6 +19,7 @@ TrayController::TrayController(QObject* parent)
     m_menu = new QMenu;
     m_captureAction = m_menu->addAction(QStringLiteral("截图"));
     m_ocrAction = m_menu->addAction(QStringLiteral("屏幕取字"));
+    QAction* historyAction = m_menu->addAction(QStringLiteral("截图历史"));
     m_menu->addSeparator();
     QAction* showAction = m_menu->addAction(QStringLiteral("打开主窗口"));
     QAction* settingsAction = m_menu->addAction(QStringLiteral("设置"));
@@ -27,6 +28,7 @@ TrayController::TrayController(QObject* parent)
 
     connect(m_captureAction, &QAction::triggered, this, &TrayController::captureRequested);
     connect(m_ocrAction, &QAction::triggered, this, &TrayController::ocrRequested);
+    connect(historyAction, &QAction::triggered, this, &TrayController::historyRequested);
     connect(showAction, &QAction::triggered, this, &TrayController::showMainRequested);
     connect(settingsAction, &QAction::triggered, this, &TrayController::settingsRequested);
     connect(quitAction, &QAction::triggered, this, &TrayController::quitRequested);

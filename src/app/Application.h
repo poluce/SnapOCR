@@ -27,6 +27,14 @@ namespace snapocr::ocr {
 class OcrService;
 }
 
+namespace snapocr::history {
+class HistoryStore;
+}
+
+namespace snapocr::ui {
+class HistoryDialog;
+}
+
 namespace snapocr::app {
 
 class HotkeyManager;
@@ -62,6 +70,8 @@ private:
     void startOcrCapture();
     void onCopyRequested(const QImage& image);
     void pinImage(const QImage& image);
+    void showHistory();
+    void recordHistory(const QImage& image);
     void onSaveRequested(const QImage& image);
     void onCaptureError(const QString& message);
 
@@ -91,6 +101,8 @@ private:
     QPointer<ui::OcrResultDialog> m_ocrDialog;
     // 贴图窗口列表（Qt::WA_DeleteOnClose，析构自动移除）
     QVector<QPointer<ui::PinWindow>> m_pins;
+    history::HistoryStore* m_history = nullptr;
+    QPointer<ui::HistoryDialog> m_historyDialog;
     QImage m_lastOcrImage;
     bool m_initialized = false;
 

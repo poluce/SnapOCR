@@ -179,6 +179,12 @@ void drawAction(QPainter& painter, const QString& action)
         painter.drawLine(QPointF(6.5, 6.5), QPointF(8, 4));
         painter.drawLine(QPointF(8, 4), QPointF(12, 4));
         painter.drawLine(QPointF(12, 4), QPointF(13.5, 6.5));
+    } else if (action == QLatin1String("history")) {
+        // 时钟：圆 + 指针 + 逆时针箭头
+        painter.drawEllipse(QPointF(10, 10.5), 7.0, 7.0);
+        painter.drawLine(QPointF(10, 6.5), QPointF(10, 10.5));
+        painter.drawLine(QPointF(10, 10.5), QPointF(13, 12));
+        painter.drawArc(QRectF(2.5, 3.0, 5.0, 5.0), 30 * 16, 120 * 16);
     } else if (action == QLatin1String("pin")) {
         // 图钉：斜向针身 + 圆头 + 底部针尖
         painter.drawLine(QPointF(13, 3), QPointF(7, 9));

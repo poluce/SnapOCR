@@ -36,6 +36,8 @@
 #include "platform/win32/Startup.h"
 #include "platform/win32/WindowActivation.h"
 #include "snapocr/Version.h"
+#include "history/HistoryStore.h"
+#include "ui/HistoryDialog.h"
 #include "ui/MainWindow.h"
 #include "ui/OcrResultDialog.h"
 #include "ui/PinWindow.h"
@@ -152,6 +154,7 @@ bool Application::initializeServices()
     m_tray = new TrayController(this);
     connect(m_tray, &TrayController::captureRequested, this, &Application::startCapture);
     connect(m_tray, &TrayController::ocrRequested, this, &Application::startOcrCapture);
+    connect(m_tray, &TrayController::historyRequested, this, &Application::showHistory);
     connect(m_tray, &TrayController::settingsRequested, this, &Application::showSettings);
     connect(m_tray, &TrayController::showMainRequested, this, &Application::showMainWindow);
     connect(m_tray, &TrayController::quitRequested, this, &Application::quitApplication);
@@ -188,6 +191,8 @@ bool Application::initializeServices()
         }
     });
 
+    m_history = new history::HistoryStore(this);
+
     m_ocrService = new ocr::OcrService(this);
     m_ocrService->setEngine(std::make_unique<ocr::WindowsOcrEngine>());
     connect(m_ocrService, &ocr::OcrService::finished, this, &Application::onOcrFinished);
@@ -216,6 +221,8 @@ bool Application::initializeServices()
     connect(m_mainWindow.get(), &ui::MainWindow::captureRequested, this,
             &Application::startCapture);
     connect(m_mainWindow.get(), &ui::MainWindow::ocrRequested, this, &Application::startOcrCapture);
+    connect(m_mainWindow.get(), &ui::MainWindow::historyRequested, this,
+            &Application::showHistory);
     connect(m_mainWindow.get(), &ui::MainWindow::settingsChanged, this,
             [this](const common::AppSettings& changed) { applySettings(changed); });
     updateHotkeyLabels();
@@ -425,11 +432,42 @@ void Application::startOcrCapture()
     beginCaptureNow(true);
 }
 
+void Application::recordHistory(const QImage& image)
+{
+    if (m_history == nullptr || image.isNull()) {
+        return;
+    }
+    m_history->add(image);
+    if (m_historyDialog != nullptr) {
+        m_historyDialog->refresh();
+    }
+}
+
+void Application::showHistory()
+{
+    if (m_history == nullptr) {
+        return;
+    }
+    if (m_historyDialog == nullptr) {
+        auto* dialog = new ui::HistoryDialog(m_history);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(dialog, &ui::HistoryDialog::copyRequested, this, &Application::onCopyRequested);
+        connect(dialog, &ui::HistoryDialog::pinRequested, this, &Application::pinImage);
+        connect(dialog, &ui::HistoryDialog::saveRequested, this, &Application::onSaveRequested);
+        m_historyDialog = dialog;
+    }
+    m_historyDialog->refresh();
+    m_historyDialog->show();
+    m_historyDialog->raise();
+    m_historyDialog->activateWindow();
+}
+
 void Application::pinImage(const QImage& image)
 {
     if (image.isNull()) {
         return;
     }
+    recordHistory(image);
     auto* pin = new ui::PinWindow(image);
     // 贴图窗口出现在光标附近，避免正好盖住选区原位置影响对照。
     const QPoint cursor = QCursor::pos();
@@ -452,6 +490,7 @@ void Application::pinImage(const QImage& image)
 
 void Application::onCopyRequested(const QImage& image)
 {
+    recordHistory(image);
     QString error;
     if (platform::win32::copyImageToClipboard(image, &error)) {
         showInfo(QStringLiteral("已复制到剪贴板（%1 × %2）").arg(image.width()).arg(image.height()));
@@ -467,6 +506,7 @@ void Application::onCopyRequested(const QImage& image)
 
 void Application::onSaveRequested(const QImage& image)
 {
+    recordHistory(image);
     QString savedPath;
     QString error;
     if (ImageSaver::save(image, m_settings, &savedPath, &error)) {

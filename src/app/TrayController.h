@@ -29,6 +29,7 @@ public:
 signals:
     void captureRequested();
     void ocrRequested();
+    void historyRequested();
     void settingsRequested();
     void showMainRequested();
     void quitRequested();
