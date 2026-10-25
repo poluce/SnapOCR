@@ -355,6 +355,8 @@ AppSettings SettingsStore::load(QString* warning) const
         readBoolValue(ini, QStringLiteral("ocr/autoCopy"), settings.ocrAutoCopy, &issues);
     settings.pinOnCopy =
         readBoolValue(ini, QStringLiteral("editor/pinOnCopy"), settings.pinOnCopy, &issues);
+    settings.detectWindows =
+        readBoolValue(ini, QStringLiteral("capture/detectWindows"), settings.detectWindows, &issues);
     settings.ocrLanguage =
         readTextValue(ini, QStringLiteral("ocr/language"), settings.ocrLanguage, true, &issues);
 
@@ -436,6 +438,7 @@ bool SettingsStore::save(const AppSettings& settings, QString* error) const
     ini.setValue(QStringLiteral("ocr/engine"), settings.ocrEngine);
     ini.setValue(QStringLiteral("ocr/autoCopy"), settings.ocrAutoCopy);
     ini.setValue(QStringLiteral("editor/pinOnCopy"), settings.pinOnCopy);
+    ini.setValue(QStringLiteral("capture/detectWindows"), settings.detectWindows);
     ini.setValue(QStringLiteral("ocr/language"), settings.ocrLanguage);
 
     ini.setValue(QStringLiteral("save/directory"), settings.saveDirectory);

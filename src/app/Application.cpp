@@ -234,6 +234,7 @@ bool Application::initializeServices()
     initialStyle.fontSize = m_settings.lastFontSize;
     m_overlayController->setAnnotationStyle(initialStyle);
     m_overlayController->setIncludeCursor(m_settings.includeCursor);
+    m_overlayController->setDetectWindows(m_settings.detectWindows);
 
     return true;
 }
@@ -678,6 +679,7 @@ void Application::applySettings(const common::AppSettings& incoming)
 
     if (m_overlayController != nullptr) {
         m_overlayController->setIncludeCursor(m_settings.includeCursor);
+    m_overlayController->setDetectWindows(m_settings.detectWindows);
     }
 
     if (m_settings.theme != previous.theme) {

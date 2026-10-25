@@ -20,6 +20,7 @@ class OverlayMagnifierTest final : public QObject
 private slots:
     void paintedPanelVisibleWithoutSelection();
     void samplePointMatchesCursor();
+    void clickingWindowSelectsItsRect();
 };
 
 namespace {
@@ -102,6 +103,29 @@ void OverlayMagnifierTest::samplePointMatchesCursor()
     // 绘制面板中心格用的就是这个取样点，直接验证取色函数与该点一致
     QCOMPARE(ColorMagnifier::sampleColor(frame.image, QPoint(65, 65)), QColor(0xFF, 0x00, 0x00));
     window.hideMagnifier();
+}
+
+void OverlayMagnifierTest::clickingWindowSelectsItsRect()
+{
+    const capture::ScreenFrame frame = makeFrame();
+    const QVector<capture::MonitorInfo> monitors{frame.monitor};
+    SelectionModel selection;
+    selection.setBounds(frame.monitor.physicalGeometry);
+
+    OverlayWindow window(frame, &monitors, &selection);
+    window.resize(frame.monitor.logicalGeometry.size());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QSignalSpy releasedSpy(&window, &OverlayWindow::selectionReleased);
+    const QRect target(100, 100, 200, 150);
+    window.applyWindowSelection(target);
+
+    QCOMPARE(releasedSpy.count(), 1);
+    QVERIFY(selection.hasUsableSelection());
+    QCOMPARE(selection.rect(), target);
+    // 窗口识别选中后不应残留悬停高亮
+    window.clearWindowHover();
 }
 
 QTEST_MAIN(OverlayMagnifierTest)

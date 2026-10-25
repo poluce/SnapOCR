@@ -22,6 +22,8 @@ struct AppSettings
     // 捕获
     bool includeCursor = false;
     int delaySeconds = 0;
+    // 窗口识别：悬停高亮窗口、单击选中该窗口（F-CAP-15）
+    bool detectWindows = true;
 
     // 编辑器
     QColor lastColor = QColor(QStringLiteral("#FF3B30"));

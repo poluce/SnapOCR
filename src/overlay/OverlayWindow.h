@@ -33,6 +33,13 @@ public:
     void showMagnifierAt(const QPoint& globalLogical);
     void hideMagnifier();
 
+    // F-CAP-15：窗口识别（控制器轮询驱动），悬停高亮 + 单击选中窗口区域
+    void updateWindowHover(const QPointF& globalLogical);
+    void setDetectWindows(bool enabled) { m_detectWindows = enabled; }
+    void clearWindowHover();
+    // 直接把某个窗口矩形应用为当前选区（窗口识别点击时调用）
+    void applyWindowSelection(const QRect& physicalRect);
+
 signals:
     void selectionChanged();
     void selectionReleased();
@@ -67,6 +74,10 @@ private:
     bool m_magnifierVisible = false;
     QPoint m_magnifierCursorLogical;
     QPoint m_magnifierSamplePhysical;
+
+    bool m_hoverWindowVisible = false;
+    QRect m_hoverWindowPhysical;  // 虚拟桌面物理坐标
+    bool m_detectWindows = true;
 };
 
 }  // namespace snapocr::overlay

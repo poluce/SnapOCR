@@ -2,6 +2,8 @@
 
 #include "overlay/ColorMagnifier.h"
 
+#include "platform/win32/WindowDetector.h"
+
 #include <QDebug>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -89,7 +91,22 @@ void OverlayWindow::paintEvent(QPaintEvent* event)
     // 2. 暗化遮罩
     painter.fillRect(rect(), QColor(0, 0, 0, static_cast<int>(kDimAlpha)));
 
-    // 3. 像素放大镜（无选区时也要显示：取色与选区无关）
+    // 3. 窗口识别高亮（悬停时显示，鼠标按下或已有选区时隐藏）
+    if (m_hoverWindowVisible && !m_dragging && !m_selection->hasUsableSelection()) {
+        const QRect local =
+            m_hoverWindowPhysical.translated(-m_frame.monitor.physicalGeometry.topLeft());
+        const QRectF hoverRect(QPointF(local.topLeft()), QSizeF(local.size()));
+        QColor fill(0x1F, 0x6F, 0xEB);
+        fill.setAlpha(38);
+        painter.fillRect(hoverRect, fill);
+        QPen border(QColor(0x1F, 0x8F, 0xEB));
+        border.setWidthF(2.0 / qMax<qreal>(1.0, m_frame.monitor.devicePixelRatio));
+        painter.setPen(border);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(hoverRect.adjusted(0.5, 0.5, -0.5, -0.5));
+    }
+
+    // 4. 像素放大镜（无选区时也要显示：取色与选区无关）
     paintMagnifier(painter);
 
     const QRectF selectionLocal = selectionInLocal();
@@ -180,6 +197,12 @@ void OverlayWindow::mousePressEvent(QMouseEvent* event)
     const QPoint physical = physicalFromGlobal(event->globalPosition());
     const int handleSize = qRound(kHandleSizeLogical * m_frame.monitor.devicePixelRatio);
 
+    // F-CAP-15：光标悬停在某个窗口上且当前没有选区 → 单击直接选中该窗口
+    if (m_hoverWindowVisible && !m_selection->hasUsableSelection()) {
+        applyWindowSelection(m_hoverWindowPhysical);
+        return;
+    }
+
     if (m_selection->isActive() && m_selection->hasUsableSelection()) {
         const SelectionModel::Handle handle = m_selection->hitTest(physical, handleSize);
         if (handle == SelectionModel::Handle::Inside) {
@@ -214,6 +237,7 @@ void OverlayWindow::mouseMoveEvent(QMouseEvent* event)
     const QPoint physical = physicalFromGlobal(event->globalPosition());
 
     if (m_dragging) {
+        m_hoverWindowVisible = false;
         switch (m_selection->dragMode()) {
         case SelectionModel::DragMode::Creating:
             m_selection->updateCreate(physical);
@@ -257,6 +281,54 @@ void OverlayWindow::mouseMoveEvent(QMouseEvent* event)
             break;
         }
     }
+}
+
+void OverlayWindow::updateWindowHover(const QPointF& globalLogical)
+{
+    if (!m_detectWindows || !m_interactive) {
+        clearWindowHover();
+        return;
+    }
+    if (m_dragging || m_selection->hasUsableSelection()
+        || !rect().contains(globalLogical.toPoint())) {
+        clearWindowHover();
+        return;
+    }
+    const QPoint globalPhysical = physicalFromGlobal(globalLogical);
+    platform::win32::WindowTarget target;
+    if (!platform::win32::windowAtPhysicalPoint(globalPhysical, &target)) {
+        clearWindowHover();
+        return;
+    }
+    const QRect clamped = target.physicalGeometry.intersected(m_frame.monitor.physicalGeometry);
+    if (clamped.isEmpty()) {
+        clearWindowHover();
+        return;
+    }
+    if (m_hoverWindowVisible && m_hoverWindowPhysical == clamped) {
+        return;  // 没变化就不重绘
+    }
+    m_hoverWindowVisible = true;
+    m_hoverWindowPhysical = clamped;
+    update();
+}
+
+void OverlayWindow::clearWindowHover()
+{
+    if (m_hoverWindowVisible) {
+        m_hoverWindowVisible = false;
+        update();
+    }
+}
+
+void OverlayWindow::applyWindowSelection(const QRect& physicalRect)
+{
+    // SelectionModel 使用虚拟桌面物理坐标，直接设置
+    m_selection->setRect(physicalRect);
+    m_hoverWindowVisible = false;
+    emit selectionChanged();
+    emit selectionReleased();
+    update();
 }
 
 void OverlayWindow::showMagnifierAt(const QPoint& globalLogical)

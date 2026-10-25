@@ -84,7 +84,8 @@ target_link_libraries(snapocr_core
 
 if(WIN32)
     # C++/WinRT（Windows.Media.Ocr）与系统 API
-    target_link_libraries(snapocr_core PUBLIC windowsapp)
+    # windowsapp：C++/WinRT（Windows.Media.Ocr）；dwmapi：窗口可见边框/Cloaked 判定
+    target_link_libraries(snapocr_core PUBLIC windowsapp dwmapi)
 endif()
 
 snapocr_set_common_options(snapocr_core)

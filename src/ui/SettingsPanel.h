@@ -57,6 +57,7 @@ private:
     QComboBox* m_delaySeconds = nullptr;
     ToggleSwitch* m_includeCursor = nullptr;
     ToggleSwitch* m_pinOnCopy = nullptr;
+    ToggleSwitch* m_detectWindows = nullptr;
     bool m_loading = false;
 };
 

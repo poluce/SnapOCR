@@ -60,6 +60,7 @@ void OverlayController::stopMagnifierPolling()
     for (OverlayWindow* window : m_overlays) {
         if (window != nullptr) {
             window->hideMagnifier();
+            window->clearWindowHover();
         }
     }
 }
@@ -75,6 +76,7 @@ void OverlayController::updateMagnifierFromCursor()
             continue;
         }
         if (window->monitor().logicalGeometry.contains(globalLogical)) {
+            window->updateWindowHover(globalLogical);
             window->showMagnifierAt(globalLogical);
             return;
         }
@@ -82,6 +84,7 @@ void OverlayController::updateMagnifierFromCursor()
     for (OverlayWindow* window : m_overlays) {
         if (window != nullptr) {
             window->hideMagnifier();
+            window->clearWindowHover();
         }
     }
 }
@@ -89,6 +92,17 @@ void OverlayController::updateMagnifierFromCursor()
 void OverlayController::setIncludeCursor(bool include)
 {
     m_includeCursor = include;
+}
+
+void OverlayController::setDetectWindows(bool enabled)
+{
+    m_detectWindows = enabled;
+    for (OverlayWindow* window : m_overlays) {
+        if (window != nullptr) {
+            window->setDetectWindows(enabled);
+            window->clearWindowHover();
+        }
+    }
 }
 
 void OverlayController::beginCapture()
@@ -173,6 +187,7 @@ void OverlayController::buildOverlays()
     destroyOverlays();
     for (const capture::ScreenFrame& frame : m_result.screens) {
         auto* window = new OverlayWindow(frame, &m_monitors, &m_selection);
+        window->setDetectWindows(m_detectWindows);
         connect(window, &OverlayWindow::selectionChanged, this,
                 &OverlayController::onSelectionChanged);
         connect(window, &OverlayWindow::selectionReleased, this,
