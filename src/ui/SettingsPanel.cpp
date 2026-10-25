@@ -43,7 +43,7 @@ void SettingsPanel::buildUi()
 {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
-    root->setSpacing(14);
+    root->setSpacing(2);
 
     // ---- 热键 ----
     m_captureHotkey = new QKeySequenceEdit(this);
@@ -54,11 +54,10 @@ void SettingsPanel::buildUi()
     connect(m_captureHotkey, &QKeySequenceEdit::editingFinished, this, &SettingsPanel::emitChanged);
     connect(m_ocrHotkey, &QKeySequenceEdit::editingFinished, this, &SettingsPanel::emitChanged);
 
-    root->addWidget(makeSection(QStringLiteral("热键"), {
-        makeRow(QStringLiteral("截图"), m_captureHotkey),
-        makeSeparator(),
-        makeRow(QStringLiteral("屏幕取字"), m_ocrHotkey),
-    }));
+    root->addWidget(makeRow(QStringLiteral("截图热键"), m_captureHotkey));
+    root->addWidget(makeSeparator());
+    root->addWidget(makeRow(QStringLiteral("取字热键"), m_ocrHotkey));
+    root->addWidget(makeGroupGap());
 
     // ---- 保存 ----
     auto* dirRow = new QWidget(this);
@@ -116,15 +115,14 @@ void SettingsPanel::buildUi()
     m_nameTemplate->setPlaceholderText(QStringLiteral("SnapOCR_yyyyMMdd_HHmmss"));
     connect(m_nameTemplate, &QLineEdit::editingFinished, this, &SettingsPanel::emitChanged);
 
-    root->addWidget(makeSection(QStringLiteral("保存"), {
-        makeRow(QStringLiteral("保存目录"), dirRow),
-        makeSeparator(),
-        makeRow(QStringLiteral("保存格式"), m_format),
-        makeSeparator(),
-        makeRow(QStringLiteral("JPG 质量"), qualityRow),
-        makeSeparator(),
-        makeRow(QStringLiteral("文件名模板"), m_nameTemplate),
-    }));
+    root->addWidget(makeRow(QStringLiteral("保存目录"), dirRow));
+    root->addWidget(makeSeparator());
+    root->addWidget(makeRow(QStringLiteral("保存格式"), m_format));
+    root->addWidget(makeSeparator());
+    root->addWidget(makeRow(QStringLiteral("JPG 质量"), qualityRow));
+    root->addWidget(makeSeparator());
+    root->addWidget(makeRow(QStringLiteral("文件名模板"), m_nameTemplate));
+    root->addWidget(makeGroupGap());
 
     // ---- 外观 ----
     auto* segments = new QWidget(this);
@@ -151,18 +149,16 @@ void SettingsPanel::buildUi()
     m_autoStart = new ToggleSwitch(this);
     connect(m_autoStart, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
 
-    root->addWidget(makeSection(QStringLiteral("外观与启动"), {
-        makeRow(QStringLiteral("主题"), segments),
-        makeSeparator(),
-        makeToggleRow(QStringLiteral("开机自动启动"), m_autoStart),
-    }));
+    root->addWidget(makeRow(QStringLiteral("主题"), segments));
+    root->addWidget(makeSeparator());
+    root->addWidget(makeToggleRow(QStringLiteral("开机自动启动"), m_autoStart));
+    root->addWidget(makeGroupGap());
 
     // ---- 文字识别 ----
     m_ocrAutoCopy = new ToggleSwitch(this);
     connect(m_ocrAutoCopy, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
-    root->addWidget(
-        makeSection(QStringLiteral("文字识别"),
-                    {makeToggleRow(QStringLiteral("识别后自动复制到剪贴板"), m_ocrAutoCopy)}));
+    root->addWidget(makeToggleRow(QStringLiteral("识别后自动复制"), m_ocrAutoCopy));
+    root->addWidget(makeGroupGap());
 
     // ---- 高级 ----
     m_logLevel = new QComboBox(this);
@@ -171,8 +167,7 @@ void SettingsPanel::buildUi()
     m_logLevel->addItem(QStringLiteral("信息"), QStringLiteral("info"));
     m_logLevel->addItem(QStringLiteral("调试"), QStringLiteral("debug"));
     connect(m_logLevel, &QComboBox::currentIndexChanged, this, &SettingsPanel::emitChanged);
-    root->addWidget(
-        makeSection(QStringLiteral("高级"), {makeRow(QStringLiteral("日志级别"), m_logLevel)}));
+    root->addWidget(makeRow(QStringLiteral("日志级别"), m_logLevel));
 }
 
 QWidget* SettingsPanel::makeSeparator()
@@ -184,16 +179,24 @@ QWidget* SettingsPanel::makeSeparator()
     return line;
 }
 
+QWidget* SettingsPanel::makeGroupGap()
+{
+    auto* gap = new QWidget(this);
+    gap->setObjectName(QStringLiteral("groupGap"));
+    gap->setFixedHeight(12);
+    return gap;
+}
+
 QWidget* SettingsPanel::makeRow(const QString& label, QWidget* control)
 {
     auto* row = new QWidget(this);
     auto* layout = new QHBoxLayout(row);
-    layout->setContentsMargins(0, 7, 0, 7);
+    layout->setContentsMargins(0, 6, 0, 6);
     layout->setSpacing(16);
 
     auto* nameLabel = new QLabel(label, row);
     nameLabel->setObjectName(QStringLiteral("rowLabel"));
-    nameLabel->setMinimumWidth(84);
+    nameLabel->setMinimumWidth(88);
     layout->addWidget(nameLabel, 0, Qt::AlignVCenter);
     layout->addWidget(control, 1);
     return row;
@@ -213,42 +216,16 @@ QWidget* SettingsPanel::makeToggleRow(const QString& label, ToggleSwitch* toggle
     return row;
 }
 
-QWidget* SettingsPanel::makeSection(const QString& caption, const QVector<QWidget*>& rows)
-{
-    auto* section = new QWidget(this);
-    auto* layout = new QVBoxLayout(section);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(6);
-
-    auto* captionLabel = new QLabel(caption, section);
-    captionLabel->setObjectName(QStringLiteral("sectionCaption"));
-    layout->addWidget(captionLabel);
-
-    auto* card = new QWidget(section);
-    card->setObjectName(QStringLiteral("settingsCard"));
-    card->setAttribute(Qt::WA_StyledBackground, true);
-    auto* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(18, 6, 18, 6);
-    cardLayout->setSpacing(0);
-    for (QWidget* row : rows) {
-        cardLayout->addWidget(row);
-    }
-    layout->addWidget(card);
-    return section;
-}
-
 void SettingsPanel::applyStyleSheet()
 {
     setStyleSheet(QStringLiteral(R"(
-QLabel#sectionCaption { color: #8A9099; font-size: 12px; font-weight: 600; padding-left: 2px; }
-QWidget#settingsCard { background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 10px; }
-QFrame#rowSeparator { background: #F0F2F5; border: none; }
+QFrame#rowSeparator { background: #EDEFF3; border: none; }
 QLabel#rowLabel { color: #1F2328; font-size: 13px; }
 QLabel#valueLabel { color: #525862; font-size: 13px; }
 
 QLineEdit, QComboBox, QKeySequenceEdit {
     background: #FFFFFF; border: 1px solid #D8DCE3; border-radius: 7px;
-    padding: 5px 10px; min-height: 22px; color: #1F2328; font-size: 13px;
+    padding: 4px 10px; min-height: 20px; color: #1F2328; font-size: 13px;
     selection-background-color: #1F6FEB;
 }
 QLineEdit:hover, QComboBox:hover, QKeySequenceEdit:hover { border-color: #C2C8D1; }

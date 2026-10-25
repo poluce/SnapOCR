@@ -6,6 +6,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScreen>
+#include <QShowEvent>
 #include <QScrollBar>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -20,7 +22,7 @@ namespace snapocr::ui {
 namespace {
 
 constexpr int kShadowMargin = 16;
-constexpr int kWindowWidth = 640;
+constexpr int kWindowWidth = 520;
 
 }  // namespace
 
@@ -81,81 +83,28 @@ void MainWindow::buildUi()
 
     auto* content = new QWidget(m_scroll);
     content->setObjectName(QStringLiteral("contentArea"));
+    m_contentWidget = content;
     auto* contentLayout = new QVBoxLayout(content);
-    contentLayout->setContentsMargins(22, 18, 22, 10);
-    contentLayout->setSpacing(16);
+    contentLayout->setContentsMargins(18, 12, 18, 6);
+    contentLayout->setSpacing(6);
 
-    // ---- 品牌头部 ----
-    auto* header = new QWidget(content);
-    auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(0, 0, 0, 0);
-    headerLayout->setSpacing(14);
-
-    auto* iconLabel = new QLabel(header);
-    iconLabel->setPixmap(ui::appIcon().pixmap(40, 40));
-    iconLabel->setFixedSize(40, 40);
-    headerLayout->addWidget(iconLabel, 0, Qt::AlignTop);
-
-    auto* titleColumn = new QVBoxLayout;
-    titleColumn->setContentsMargins(0, 0, 0, 0);
-    titleColumn->setSpacing(2);
-    auto* nameLabel = new QLabel(QStringLiteral("SnapOCR"), header);
-    nameLabel->setObjectName(QStringLiteral("appName"));
-    auto* descLabel = new QLabel(QStringLiteral("Windows 截图 · 标注 · 文字识别"), header);
-    descLabel->setObjectName(QStringLiteral("appDesc"));
-    titleColumn->addWidget(nameLabel);
-    titleColumn->addWidget(descLabel);
-    headerLayout->addLayout(titleColumn, 1);
-
-    auto* versionLabel =
-        new QLabel(QStringLiteral("v%1").arg(QString::fromUtf8(snapocr::version::kVersion)), header);
-    versionLabel->setObjectName(QStringLiteral("versionBadge"));
-    headerLayout->addWidget(versionLabel, 0, Qt::AlignTop);
-    contentLayout->addWidget(header);
-
-    // ---- 操作卡片 ----
-    auto* actions = new QWidget(content);
-    auto* actionsLayout = new QHBoxLayout(actions);
-    actionsLayout->setContentsMargins(0, 0, 0, 0);
-    actionsLayout->setSpacing(12);
-
+    // ---- 操作入口（紧凑两行，不再放大标题/说明） ----
     m_captureButton = makeActionCard(QStringLiteral("camera"), QStringLiteral("截图"),
-                                     QStringLiteral("框选屏幕区域，标注后复制或保存"),
-                                     &m_captureHotkeyBadge, actions);
+                                     &m_captureHotkeyBadge, content);
     m_ocrButton = makeActionCard(QStringLiteral("ocr"), QStringLiteral("屏幕取字"),
-                                 QStringLiteral("框选区域直接识别文字并复制"),
-                                 &m_ocrHotkeyBadge, actions);
-    actionsLayout->addWidget(m_captureButton, 1);
-    actionsLayout->addWidget(m_ocrButton, 1);
-    contentLayout->addWidget(actions);
+                                 &m_ocrHotkeyBadge, content);
+    contentLayout->addWidget(m_captureButton);
+    contentLayout->addWidget(m_ocrButton);
 
     connect(m_captureButton, &QPushButton::clicked, this, &MainWindow::captureRequested);
     connect(m_ocrButton, &QPushButton::clicked, this, &MainWindow::ocrRequested);
-
-    // ---- 提示 ----
-    auto* tips = new QWidget(content);
-    tips->setObjectName(QStringLiteral("tipsCard"));
-    tips->setAttribute(Qt::WA_StyledBackground, true);
-    auto* tipsLayout = new QVBoxLayout(tips);
-    tipsLayout->setContentsMargins(14, 10, 14, 10);
-    tipsLayout->setSpacing(6);
-    tipsLayout->addWidget(makeTip(QStringLiteral("confirm"),
-                                  QStringLiteral("截图后：Enter 复制 · Ctrl+S 保存 · Esc 取消"),
-                                  tips));
-    tipsLayout->addWidget(makeTip(QStringLiteral("settings"),
-                                  QStringLiteral("关闭窗口会隐藏到托盘，右键托盘图标可退出"),
-                                  tips));
-    contentLayout->addWidget(tips);
 
     // ---- 设置（同一窗口内） ----
     auto* settingsSection = new QWidget(content);
     m_settingsSection = settingsSection;
     auto* settingsLayout = new QVBoxLayout(settingsSection);
-    settingsLayout->setContentsMargins(0, 6, 0, 0);
-    settingsLayout->setSpacing(8);
-    auto* settingsTitle = new QLabel(QStringLiteral("设置"), settingsSection);
-    settingsTitle->setObjectName(QStringLiteral("sectionTitle"));
-    settingsLayout->addWidget(settingsTitle);
+    settingsLayout->setContentsMargins(0, 10, 0, 0);
+    settingsLayout->setSpacing(0);
     m_settingsPanel = new SettingsPanel(settingsSection);
     settingsLayout->addWidget(m_settingsPanel);
     contentLayout->addWidget(settingsSection);
@@ -174,6 +123,11 @@ void MainWindow::buildUi()
     m_statusLabel = new QLabel(QStringLiteral("就绪"), footer);
     m_statusLabel->setObjectName(QStringLiteral("statusLabel"));
     footerLayout->addWidget(m_statusLabel, 1);
+
+    auto* versionLabel =
+        new QLabel(QStringLiteral("v%1").arg(QString::fromUtf8(snapocr::version::kVersion)), footer);
+    versionLabel->setObjectName(QStringLiteral("versionLabel"));
+    footerLayout->addWidget(versionLabel, 0, Qt::AlignRight);
     contentLayout->addWidget(footer);
 
     m_scroll->setWidget(content);
@@ -182,70 +136,42 @@ void MainWindow::buildUi()
     setCentralWidget(wrapper);
 
     setFixedWidth(kWindowWidth + kShadowMargin * 2);
-    setMinimumHeight(420);
-    resize(kWindowWidth + kShadowMargin * 2, 720);
+    setMinimumHeight(360);
+    resize(kWindowWidth + kShadowMargin * 2, 640);
 }
 
 QPushButton* MainWindow::makeActionCard(const QString& iconAction, const QString& title,
-                                        const QString& hint, QLabel** hotkeyBadge, QWidget* parent)
+                                        QLabel** hotkeyBadge, QWidget* parent)
 {
     auto* card = new QPushButton(parent);
     card->setObjectName(QStringLiteral("actionCard"));
     card->setCursor(Qt::PointingHandCursor);
-    card->setMinimumHeight(92);
+    card->setFixedHeight(46);
 
     auto* layout = new QHBoxLayout(card);
-    layout->setContentsMargins(16, 14, 16, 14);
-    layout->setSpacing(14);
+    layout->setContentsMargins(14, 0, 14, 0);
+    layout->setSpacing(12);
 
     auto* iconLabel = new QLabel(card);
-    iconLabel->setPixmap(ui::actionIcon(iconAction, QColor(0x1F, 0x6F, 0xEB)).pixmap(QSize(26, 26), 2.0));
-    iconLabel->setFixedSize(26, 26);
+    iconLabel->setPixmap(
+        ui::actionIcon(iconAction, QColor(0x1F, 0x6F, 0xEB)).pixmap(QSize(18, 18), 2.0));
+    iconLabel->setFixedSize(18, 18);
     iconLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-    layout->addWidget(iconLabel, 0, Qt::AlignTop);
+    layout->addWidget(iconLabel, 0, Qt::AlignVCenter);
 
-    auto* textColumn = new QVBoxLayout;
-    textColumn->setContentsMargins(0, 0, 0, 0);
-    textColumn->setSpacing(2);
     auto* titleLabel = new QLabel(title, card);
     titleLabel->setObjectName(QStringLiteral("actionTitle"));
     titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-    auto* hintLabel = new QLabel(hint, card);
-    hintLabel->setObjectName(QStringLiteral("actionHint"));
-    hintLabel->setWordWrap(true);
-    hintLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-    textColumn->addWidget(titleLabel);
-    textColumn->addWidget(hintLabel);
-    layout->addLayout(textColumn, 1);
+    layout->addWidget(titleLabel, 1, Qt::AlignVCenter);
 
     auto* badge = new QLabel(card);
     badge->setObjectName(QStringLiteral("hotkeyBadge"));
     badge->setAttribute(Qt::WA_TransparentForMouseEvents);
-    layout->addWidget(badge, 0, Qt::AlignTop);
+    layout->addWidget(badge, 0, Qt::AlignVCenter);
     if (hotkeyBadge != nullptr) {
         *hotkeyBadge = badge;
     }
     return card;
-}
-
-QWidget* MainWindow::makeTip(const QString& iconAction, const QString& text, QWidget* parent)
-{
-    auto* row = new QWidget(parent);
-    auto* layout = new QHBoxLayout(row);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(8);
-
-    auto* iconLabel = new QLabel(row);
-    iconLabel->setPixmap(
-        ui::actionIcon(iconAction, QColor(0x8A, 0x90, 0x99)).pixmap(QSize(14, 14), 2.0));
-    iconLabel->setFixedSize(14, 14);
-    layout->addWidget(iconLabel, 0, Qt::AlignVCenter);
-
-    auto* textLabel = new QLabel(text, row);
-    textLabel->setObjectName(QStringLiteral("tipText"));
-    textLabel->setWordWrap(true);
-    layout->addWidget(textLabel, 1);
-    return row;
 }
 
 void MainWindow::applyStyleSheet()
@@ -273,29 +199,15 @@ QScrollBar::handle:vertical:hover { background: #BFC6D0; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 
-QLabel#appName { color: #12161B; font-size: 20px; font-weight: 700; }
-QLabel#appDesc { color: #7A818B; font-size: 12px; }
-QLabel#versionBadge {
-    color: #6B7280; background: #ECEEF2; border-radius: 9px;
-    padding: 2px 9px; font-size: 11px;
-}
-
 QPushButton#actionCard {
-    background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 12px; text-align: left;
+    background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 10px; text-align: left;
 }
 QPushButton#actionCard:hover { border-color: #C7D6F5; background: #FBFCFF; }
 QPushButton#actionCard:pressed { background: #F3F7FE; }
-QLabel#actionTitle { color: #12161B; font-size: 15px; font-weight: 600; }
-QLabel#actionHint { color: #7A818B; font-size: 12px; }
-QLabel#hotkeyBadge {
-    color: #1F6FEB; background: #EAF1FD; border-radius: 7px;
-    padding: 2px 8px; font-size: 11px; font-weight: 600;
-}
-
-QWidget#tipsCard { background: #F1F3F6; border-radius: 10px; }
-QLabel#tipText { color: #6B7280; font-size: 12px; }
-QLabel#sectionTitle { color: #12161B; font-size: 15px; font-weight: 600; }
-QLabel#statusLabel { color: #8A9099; font-size: 12px; }
+QLabel#actionTitle { color: #12161B; font-size: 14px; font-weight: 600; }
+QLabel#hotkeyBadge { color: #9AA0A8; font-size: 12px; }
+QLabel#statusLabel { color: #A0A6AE; font-size: 11px; }
+QLabel#versionLabel { color: #B4B9C0; font-size: 11px; }
 )"));
 }
 
@@ -337,6 +249,24 @@ void MainWindow::revealSettings()
             bar->setValue(m_settingsSection->y());
         }
     });
+}
+
+void MainWindow::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+
+    // 首次显示时按内容真实高度定型：内容不多时不要滚动条，
+    // 屏幕太矮时才退化为滚动。
+    if (!m_heightAdjusted && m_contentWidget != nullptr && m_titleBar != nullptr) {
+        const QScreen* screen = QGuiApplication::primaryScreen();
+        const int availableHeight = screen != nullptr ? screen->availableGeometry().height() : 900;
+        const int maxHeight = static_cast<int>(availableHeight * 0.88);
+        // +14 留出内容区底部内边距与状态行的余量，避免最后一两行被裁。
+        const int naturalHeight = kShadowMargin * 2 + m_titleBar->sizeHint().height()
+                                  + m_contentWidget->sizeHint().height() + 14;
+        setFixedHeight(qMin(naturalHeight, maxHeight));
+        m_heightAdjusted = true;
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

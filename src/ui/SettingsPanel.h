@@ -38,10 +38,10 @@ private:
     void applyStyleSheet();
     void emitChanged();
 
-    QWidget* makeSection(const QString& caption, const QVector<QWidget*>& rows);
     QWidget* makeRow(const QString& label, QWidget* control);
     QWidget* makeToggleRow(const QString& label, ToggleSwitch* toggle);
     QWidget* makeSeparator();
+    QWidget* makeGroupGap();
 
     QKeySequenceEdit* m_captureHotkey = nullptr;
     QKeySequenceEdit* m_ocrHotkey = nullptr;

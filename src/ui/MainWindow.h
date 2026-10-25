@@ -36,13 +36,13 @@ signals:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     void buildUi();
     void applyStyleSheet();
     QPushButton* makeActionCard(const QString& iconAction, const QString& title,
-                                const QString& hint, QLabel** hotkeyBadge, QWidget* parent);
-    QWidget* makeTip(const QString& iconAction, const QString& text, QWidget* parent);
+                                QLabel** hotkeyBadge, QWidget* parent);
 
     QPushButton* m_captureButton = nullptr;
     QPushButton* m_ocrButton = nullptr;
@@ -53,6 +53,8 @@ private:
     SettingsPanel* m_settingsPanel = nullptr;
     TitleBar* m_titleBar = nullptr;
     QWidget* m_settingsSection = nullptr;
+    QWidget* m_contentWidget = nullptr;
+    bool m_heightAdjusted = false;
 };
 
 }  // namespace snapocr::ui
