@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <QImage>
 #include <QRect>
 #include <QVector>
@@ -32,6 +34,13 @@ public:
 
     void beginCapture();
     void beginOcrCapture();
+
+    // 测试注入：用合成捕获结果驱动整条覆盖层链路（真实运行时保持为空，
+    // 由内部 CaptureService 走 GDI 捕获）。
+    using CaptureProvider = std::function<bool(bool includeCursor,
+                                              capture::CaptureResult* result,
+                                              QString* errorMessage)>;
+    void setCaptureProvider(CaptureProvider provider);
     // 是否把鼠标光标画进截图（来自设置 capture/includeCursor）
     void setIncludeCursor(bool include);
     // 窗口识别开关（F-CAP-15）
@@ -43,6 +52,8 @@ public:
     void requestCancel();
 
     bool isActive() const { return m_active; }
+    // 当前覆盖层窗口（每屏一个；测试与排障用，未激活时为空）
+    QVector<OverlayWindow*> overlayWindows() const { return m_overlays; }
     bool isEditing() const { return m_editor != nullptr; }
 
     // 选区是否贴到虚拟桌面边缘（OCR 裁边提示用，见 F-OCR-09）
@@ -63,6 +74,7 @@ signals:
     void errorOccurred(const QString& message);
 
 private:
+    void startCaptureInternal();
     void onCaptured(const snapocr::capture::CaptureResult& result);
     void onCaptureFailed(const QString& message);
     void buildOverlays();
@@ -96,6 +108,7 @@ private:
     void focusOverlay();
 
     capture::CaptureService* m_captureService = nullptr;
+    CaptureProvider m_captureProvider;
     bool m_includeCursor = false;
     bool m_detectWindows = true;
     QTimer* m_magnifierTimer = nullptr;

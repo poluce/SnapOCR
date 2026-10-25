@@ -107,6 +107,11 @@ void OverlayController::setDetectWindows(bool enabled)
     }
 }
 
+void OverlayController::setCaptureProvider(CaptureProvider provider)
+{
+    m_captureProvider = std::move(provider);
+}
+
 void OverlayController::beginCapture()
 {
     if (m_active) {
@@ -114,7 +119,7 @@ void OverlayController::beginCapture()
     }
     m_ocrMode = false;
     m_document.clearItems();
-    m_captureService->captureAllScreens(m_includeCursor);
+    startCaptureInternal();
 }
 
 void OverlayController::beginOcrCapture()
@@ -124,6 +129,21 @@ void OverlayController::beginOcrCapture()
     }
     m_ocrMode = true;
     m_document.clearItems();
+    startCaptureInternal();
+}
+
+void OverlayController::startCaptureInternal()
+{
+    if (m_captureProvider) {
+        capture::CaptureResult result;
+        QString error;
+        if (m_captureProvider(m_includeCursor, &result, &error)) {
+            onCaptured(result);
+        } else {
+            onCaptureFailed(error);
+        }
+        return;
+    }
     m_captureService->captureAllScreens(m_includeCursor);
 }
 
