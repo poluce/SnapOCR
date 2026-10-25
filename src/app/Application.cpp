@@ -9,6 +9,9 @@
 #include <QAbstractSpinBox>
 #include <QApplication>
 #include <QCursor>
+#include <windows.h>
+
+#include <QBuffer>
 #include <QElapsedTimer>
 #include <QLineEdit>
 #include <QTextEdit>
@@ -43,6 +46,8 @@
 #include "ui/MainWindow.h"
 #include "ui/OcrResultDialog.h"
 #include "capture/ScrollingCaptureController.h"
+#include "platform/win32/CrashReporter.h"
+#include "platform/win32/ProcessMetrics.h"
 #include "platform/win32/ScreenCapture.h"
 #include "ui/PinWindow.h"
 #include "ui/ScrollingBar.h"
@@ -77,6 +82,8 @@ constexpr auto kFlagHelp = "--help";
 constexpr auto kFlagVersion = "--version";
 constexpr auto kFlagSmokeTest = "--smoke-test";
 constexpr auto kFlagCaptureSelfTest = "--capture-selftest";
+constexpr auto kFlagStabilitySelfTest = "--stability-selftest";
+constexpr auto kFlagCrashSelfTest = "--crash-selftest";
 constexpr auto kFlagSettings = "--settings";
 
 Q_LOGGING_CATEGORY(lcApp, "snapocr.app")
@@ -115,6 +122,15 @@ int Application::run(const QStringList& arguments)
     if (args.contains(QString::fromLatin1(kFlagCaptureSelfTest))) {
         return runCaptureSelfTest();
     }
+    if (args.contains(QString::fromLatin1(kFlagStabilitySelfTest))) {
+        return runStabilitySelfTest();
+    }
+    if (args.contains(QString::fromLatin1(kFlagCrashSelfTest))) {
+        // 崩溃记录自检：安装记录器后主动触发访问冲突，进程应写出 crash-*.txt
+        platform::win32::installCrashReporter(common::defaultLogDirectory());
+        ::RaiseException(0xC0000005, 0, 0, nullptr);
+        return EXIT_FAILURE;
+    }
 
     if (!initializeServices()) {
         // 已有实例在运行：命令已转发，本次启动直接退出。
@@ -147,6 +163,7 @@ bool Application::initializeServices()
     QString warning;
     m_settings = m_settingsStore->load(&warning);
 
+    platform::win32::installCrashReporter(common::defaultLogDirectory());
     common::installLogging(m_settings.logLevel.isEmpty() ? common::defaultLogDirectory()
                                                          : common::defaultLogDirectory(),
                            m_settings.logLevel);
@@ -914,6 +931,87 @@ int Application::runSmokeTest()
     return EXIT_SUCCESS;
 }
 
+int Application::runStabilitySelfTest()
+{
+    QTextStream out(stdout);
+    out << "SnapOCR stability self test\n";
+
+    constexpr int kIterations = 20;
+    platform::win32::ProcessMetrics first;
+    platform::win32::ProcessMetrics last;
+    platform::win32::ProcessMetrics current;
+
+    for (int iteration = 0; iteration < kIterations; ++iteration) {
+        capture::CaptureResult captured;
+        QString error;
+        if (!platform::win32::ScreenCapture::captureAll(&captured, &error)) {
+            out << "FAIL: 第 " << iteration + 1 << " 轮捕获失败：" << error << '\n';
+            out.flush();
+            return EXIT_FAILURE;
+        }
+        // 模拟一次完整处理链：裁剪 + 标注渲染 + 图像编码
+        if (!captured.screens.isEmpty()) {
+            const QRect geometry = captured.screens.first().monitor.physicalGeometry;
+            const QRect region(geometry.center() - QPoint(200, 120), QSize(400, 240));
+            QImage regionImage;
+            QString regionError;
+            if (!platform::win32::ScreenCapture::captureRegion(region, &regionImage, &regionError)) {
+                out << "FAIL: 第 " << iteration + 1 << " 轮区域捕获失败：" << regionError << '\n';
+                out.flush();
+                return EXIT_FAILURE;
+            }
+
+            annotate::AnnotationDocument document;
+            document.setBaseImage(regionImage);
+            annotate::AnnotationItem rectangle;
+            rectangle.kind = annotate::AnnotationKind::Rectangle;
+            rectangle.points = {QPointF(20, 20), QPointF(200, 160)};
+            document.addItem(rectangle);
+            annotate::AnnotationItem blur;
+            blur.kind = annotate::AnnotationKind::Blur;
+            blur.style.width = 6;
+            blur.points = {QPointF(30, 200), QPointF(300, 200)};
+            document.addItem(blur);
+            const QImage rendered = document.render();
+            QByteArray bytes;
+            QBuffer buffer(&bytes);
+            buffer.open(QIODevice::WriteOnly);
+            rendered.save(&buffer, "PNG");
+        }
+
+        platform::win32::sampleProcessMetrics(&current);
+        if (iteration == 0) {
+            first = current;
+        }
+        if (iteration == kIterations / 2) {
+            out << "  mid     : " << platform::win32::describeMetrics(current) << '\n';
+        }
+    }
+    platform::win32::sampleProcessMetrics(&last);
+
+    out << "  start   : " << platform::win32::describeMetrics(first) << '\n';
+    out << "  end     : " << platform::win32::describeMetrics(last) << '\n';
+
+    const qint64 handleDelta = qint64(last.handleCount) - qint64(first.handleCount);
+    const qint64 gdiDelta = qint64(last.gdiObjects) - qint64(first.gdiObjects);
+    const qint64 userDelta = qint64(last.userObjects) - qint64(first.userObjects);
+    const qint64 workingSetDeltaMb =
+        (qint64(last.workingSetBytes) - qint64(first.workingSetBytes)) / (1024 * 1024);
+    out << "  delta   : handles=" << handleDelta << " gdi=" << gdiDelta
+        << " user=" << userDelta << " ws=" << workingSetDeltaMb << "MB\n";
+
+    // 阈值：句柄/GDI/USER 允许极小波动（+8 以内），工作集增长不超过 96MB
+    const bool ok = handleDelta <= 8 && gdiDelta <= 8 && userDelta <= 8 && workingSetDeltaMb <= 96;
+    if (ok) {
+        out << "PASS\n";
+        out.flush();
+        return EXIT_SUCCESS;
+    }
+    out << "FAIL: 疑似资源泄漏（超过阈值）\n";
+    out.flush();
+    return EXIT_FAILURE;
+}
+
 int Application::runCaptureSelfTest()
 {
     QTextStream out(stdout);
@@ -1003,6 +1101,8 @@ void Application::printHelp() const
     printLine(QStringLiteral("  --settings            启动并直接打开设置"));
     printLine(QStringLiteral("  --smoke-test          启动自检（CI / 构建验证用）"));
     printLine(QStringLiteral("  --capture-selftest    屏幕捕获自检（诊断用）"));
+    printLine(QStringLiteral("  --stability-selftest  资源稳定性自检（句柄/GDI/内存，跑 20 轮）"));
+    printLine(QStringLiteral("  --crash-selftest      崩溃记录自检（主动触发异常，验证 crash 日志）"));
 }
 
 }  // namespace snapocr::app

@@ -66,6 +66,7 @@ public:
 private:
     int runSmokeTest();
     int runCaptureSelfTest();
+    int runStabilitySelfTest();
     void printVersion() const;
     void printHelp() const;
 
