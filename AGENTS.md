@@ -115,7 +115,8 @@ ctest --test-dir build --output-on-failure
 测试：ctest 34/34 passed（含坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/
       主题/历史/贴图/长截图/窗口识别/i18n/资源度量/冒烟）
 稳定性：SnapOCR.exe --stability-selftest → 20 轮 PASS（GDI 零增长）
-性能：SnapOCR.exe --capture-selftest → 4K 全屏 58ms / 区域 18ms，PASS
+性能：SnapOCR.exe --perf-selftest → PASS（热键→遮罩 67ms / 4K 捕获 57ms /
+      区域裁剪 2ms / OCR 91ms / 空闲工作集 28MB）
 冒烟：SnapOCR.exe --smoke-test → platform=windows, PASS, exit 0
 CLI：SnapOCR.exe --version → SnapOCR 0.1.2
 发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2（CI 打包 + sha256 校验 + 独立运行验证）

@@ -30,6 +30,10 @@
 #include "app/ImageSaver.h"
 #include "app/SingleInstance.h"
 #include "app/TrayController.h"
+#include "capture/CaptureCrop.h"
+#include <QFont>
+#include <QPainter>
+#include <QEventLoop>
 #include "capture/CaptureService.h"
 #include "common/Logging.h"
 #include "common/Settings.h"
@@ -120,6 +124,7 @@ constexpr auto kFlagVersion = "--version";
 constexpr auto kFlagSmokeTest = "--smoke-test";
 constexpr auto kFlagCaptureSelfTest = "--capture-selftest";
 constexpr auto kFlagStabilitySelfTest = "--stability-selftest";
+constexpr auto kFlagPerfSelfTest = "--perf-selftest";
 constexpr auto kFlagCrashSelfTest = "--crash-selftest";
 constexpr auto kFlagSettings = "--settings";
 
@@ -161,6 +166,9 @@ int Application::run(const QStringList& arguments)
     }
     if (args.contains(QString::fromLatin1(kFlagStabilitySelfTest))) {
         return runStabilitySelfTest();
+    }
+    if (args.contains(QString::fromLatin1(kFlagPerfSelfTest))) {
+        return runPerfSelfTest();
     }
     if (args.contains(QString::fromLatin1(kFlagCrashSelfTest))) {
         // 崩溃记录自检：安装记录器后主动触发访问冲突，进程应写出 crash-*.txt
@@ -270,6 +278,9 @@ bool Application::initializeServices()
 
     connect(m_overlayController, &overlay::OverlayController::started, this, [this]() {
         registerOverlayHotkeys(true);
+        if (m_captureLatencyTimer.isValid()) {
+            qInfo("perf: 热键→遮罩 %lld ms", m_captureLatencyTimer.elapsed());
+        }
     });
     connect(m_overlayController, &overlay::OverlayController::finished, this, [this]() {
         registerOverlayHotkeys(false);
@@ -449,6 +460,7 @@ void Application::registerOverlayHotkeys(bool enabled)
 
 void Application::startCapture()
 {
+    m_captureLatencyTimer.start();
     qCDebug(lcApp, "startCapture requested delay=%d", m_settings.delaySeconds);
     if (m_overlayController == nullptr) {
         return;
@@ -469,6 +481,7 @@ void Application::startCapture()
         }
         QTimer::singleShot(delay * 1000, this, [this]() {
             m_delayPending = false;
+            m_captureLatencyTimer.restart();  // 延时到点后重新计时（不含用户设置的等待）
             beginCaptureNow(m_delayOcrMode);
         });
         return;
@@ -519,6 +532,7 @@ void Application::startOcrCapture()
         }
         QTimer::singleShot(delay * 1000, this, [this]() {
             m_delayPending = false;
+            m_captureLatencyTimer.restart();  // 延时到点后重新计时（不含用户设置的等待）
             beginCaptureNow(m_delayOcrMode);
         });
         return;
@@ -1178,6 +1192,132 @@ int Application::runStabilitySelfTest()
     out << "FAIL: 疑似资源泄漏（超过阈值）\n";
     out.flush();
     return EXIT_FAILURE;
+}
+
+int Application::runPerfSelfTest()
+{
+    QTextStream out(stdout);
+    out << "SnapOCR perf self test\n";
+
+    bool ok = true;
+
+    // 0) 空闲资源（捕获/OCR 之前采样，代表托盘常驻状态）
+    platform::win32::ProcessMetrics idleMetrics;
+    platform::win32::sampleProcessMetrics(&idleMetrics);
+    const qint64 idleWorkingSetMb = qint64(idleMetrics.workingSetBytes) / (1024 * 1024);
+    out << "  idle       : " << platform::win32::describeMetrics(idleMetrics) << '\n';
+    if (idleWorkingSetMb > 120) {
+        out << "  WARN: 空闲工作集超过 120MB\n";
+        ok = false;
+    }
+
+    // 1) 屏幕捕获：全屏（多屏拼接）耗时应远低于一帧预算
+    QElapsedTimer captureTimer;
+    captureTimer.start();
+    capture::CaptureResult captured;
+    QString captureError;
+    const bool captureOk =
+        platform::win32::ScreenCapture::captureAll(&captured, &captureError);
+    const qint64 captureMs = captureTimer.elapsed();
+    if (!captureOk) {
+        out << "FAIL: 捕获失败：" << captureError << '\n';
+        out.flush();
+        return EXIT_FAILURE;
+    }
+    out << "  captureAll : " << captureMs << " ms (" << captured.virtualGeometry.width()
+        << "x" << captured.virtualGeometry.height() << ")\n";
+    // 目标：全屏捕获 < 150ms（4K 实测约 58ms）
+    if (captureMs >= 150) {
+        out << "  WARN: 全屏捕获超过 150ms\n";
+        ok = false;
+    }
+
+    // 2) 区域捕获 + 裁剪（选区确认后的实际路径）
+    QElapsedTimer regionTimer;
+    regionTimer.start();
+    const QRect region(0, 0, qMin(1920, captured.virtualGeometry.width()),
+                       qMin(1080, captured.virtualGeometry.height()));
+    const QImage cropped = capture::cropSelection(captured, region.translated(captured.virtualGeometry.topLeft()));
+    const qint64 regionMs = regionTimer.elapsed();
+    out << "  region     : " << cropped.width() << 'x' << cropped.height() << " (" << regionMs
+        << " ms)\n";
+    if (cropped.isNull() || regionMs >= 150) {
+        out << "  WARN: 区域捕获异常\n";
+        ok = false;
+    }
+
+    // 3) OCR 端到端：合成一张带文字的 1920x1080 图，走完整异步服务链路
+    QImage sample(1920, 1080, QImage::Format_ARGB32);
+    sample.fill(Qt::white);
+    {
+        QPainter painter(&sample);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        QFont font(QStringLiteral("Microsoft YaHei"));
+        font.setPixelSize(34);
+        painter.setFont(font);
+        painter.setPen(Qt::black);
+        painter.drawText(QRect(80, 100, 1760, 200), Qt::AlignLeft | Qt::AlignVCenter,
+                         QStringLiteral("SnapOCR 性能自检：截图、标注与离线取字。"));
+        font.setPixelSize(28);
+        painter.setFont(font);
+        for (int line = 0; line < 8; ++line) {
+            painter.drawText(QRect(80, 320 + line * 70, 1760, 60), Qt::AlignLeft | Qt::AlignVCenter,
+                             QStringLiteral("第 %1 行测试文本 SnapOCR performance line %2")
+                                 .arg(line + 1)
+                                 .arg(line + 1));
+        }
+    }
+
+    ocr::OcrService service;
+    service.setEngine(std::make_unique<ocr::WindowsOcrEngine>());
+    service.setTimeoutMs(12000);
+    ocr::OcrResult ocrResult;
+    bool ocrDone = false;
+    connect(&service, &ocr::OcrService::finished, this,
+            [&ocrResult, &ocrDone](const ocr::OcrResult& result) {
+                ocrResult = result;
+                ocrDone = true;
+            });
+    QElapsedTimer ocrTimer;
+    ocrTimer.start();
+    service.recognizeAsync(sample, QString());
+    if (!ocrDone) {
+        QEventLoop loop;
+        QTimer timeoutTimer;
+        timeoutTimer.setSingleShot(true);
+        connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+        connect(&service, &ocr::OcrService::finished, &loop, &QEventLoop::quit);
+        timeoutTimer.start(15000);
+        if (!ocrDone) {
+            loop.exec();
+        }
+    }
+    const qint64 ocrMs = ocrTimer.elapsed();
+    if (!ocrDone) {
+        out << "FAIL: OCR 在 15s 内没有返回\n";
+        out.flush();
+        return EXIT_FAILURE;
+    }
+    if (!ocrResult.ok) {
+        out << "  WARN: OCR 失败：" << ocrResult.errorMessage << '\n';
+        ok = false;
+    }
+    out << "  ocr        : " << ocrMs << " ms, lines=" << ocrResult.lines.size()
+        << ", chars=" << ocrResult.fullText.size() << "\n";
+    // 目标：1920x1080 区域 OCR < 1000ms
+    if (ocrMs >= 1000) {
+        out << "  WARN: OCR 超过 1000ms\n";
+        ok = false;
+    }
+
+    // 4) 自检过程结束时的资源（含保留的 4K 图像，仅作参考，不参与判定）
+    platform::win32::ProcessMetrics endMetrics;
+    platform::win32::sampleProcessMetrics(&endMetrics);
+    out << "  after test : " << platform::win32::describeMetrics(endMetrics) << '\n';
+
+    out << (ok ? "PASS\n" : "FAIL\n");
+    out.flush();
+    return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 int Application::runCaptureSelfTest()

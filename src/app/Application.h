@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QImage>
 #include <QRect>
 #include <QObject>
@@ -76,6 +77,8 @@ private:
     int runSmokeTest();
     int runCaptureSelfTest();
     int runStabilitySelfTest();
+    // 性能自检：捕获耗时 / OCR 端到端耗时 / 进程资源（阶段三 §8.2 验收）
+    int runPerfSelfTest();
     void printVersion() const;
     void printHelp() const;
 
@@ -143,6 +146,8 @@ private:
 
     // 延时截图：倒计时期间忽略重复触发，到点后按记录的模式开始捕获。
     bool m_delayPending = false;
+    // 热键→遮罩耗时：startCapture 开始时启动，覆盖层显示时记录
+    QElapsedTimer m_captureLatencyTimer;
     bool m_delayOcrMode = false;
 };
 
