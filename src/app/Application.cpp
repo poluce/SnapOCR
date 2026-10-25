@@ -19,6 +19,7 @@
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <QTimer>
 
 #include "app/HotkeyManager.h"
 #include "app/ImageSaver.h"
@@ -210,6 +211,7 @@ bool Application::initializeServices()
     initialStyle.width = m_settings.lastWidth;
     initialStyle.fontSize = m_settings.lastFontSize;
     m_overlayController->setAnnotationStyle(initialStyle);
+    m_overlayController->setIncludeCursor(m_settings.includeCursor);
 
     return true;
 }
@@ -327,7 +329,7 @@ void Application::registerOverlayHotkeys(bool enabled)
 
 void Application::startCapture()
 {
-    qCDebug(lcApp, "startCapture requested");
+    qCDebug(lcApp, "startCapture requested delay=%d", m_settings.delaySeconds);
     if (m_overlayController == nullptr) {
         return;
     }
@@ -335,10 +337,46 @@ void Application::startCapture()
         // 已在进行中：先取消再重开，避免“热键没反应”的困惑。
         m_overlayController->cancel();
     }
-    if (m_mainWindow != nullptr) {
-        m_mainWindow->setStatusText(QStringLiteral("截图：拖拽选择区域"));
+
+    const int delay = m_settings.delaySeconds;
+    if (delay > 0 && !m_delayPending) {
+        // 延时截图：先倒计时提示，到点再抓屏（用于展开菜单、等待动画等场景）。
+        m_delayPending = true;
+        m_delayOcrMode = false;
+        if (m_tray != nullptr && m_tray->isAvailable()) {
+            m_tray->showMessage(QStringLiteral("SnapOCR"),
+                                QStringLiteral("%1 秒后截图…").arg(delay));
+        }
+        QTimer::singleShot(delay * 1000, this, [this]() {
+            m_delayPending = false;
+            beginCaptureNow(m_delayOcrMode);
+        });
+        return;
     }
-    m_overlayController->beginCapture();
+    if (m_delayPending) {
+        return;  // 倒计时期间忽略重复触发
+    }
+
+    beginCaptureNow(false);
+}
+
+void Application::beginCaptureNow(bool ocrMode)
+{
+    if (m_overlayController == nullptr) {
+        return;
+    }
+    if (m_delayPending) {
+        m_delayPending = false;
+    }
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setStatusText(ocrMode ? QStringLiteral("取字：拖拽选择区域")
+                                            : QStringLiteral("截图：拖拽选择区域"));
+    }
+    if (ocrMode) {
+        m_overlayController->beginOcrCapture();
+    } else {
+        m_overlayController->beginCapture();
+    }
 }
 
 void Application::startOcrCapture()
@@ -350,10 +388,25 @@ void Application::startOcrCapture()
     if (m_overlayController->isActive()) {
         m_overlayController->cancel();
     }
-    if (m_mainWindow != nullptr) {
-        m_mainWindow->setStatusText(QStringLiteral("取字：拖拽选择要识别的区域"));
+
+    const int delay = m_settings.delaySeconds;
+    if (delay > 0 && !m_delayPending) {
+        m_delayPending = true;
+        m_delayOcrMode = true;
+        if (m_tray != nullptr && m_tray->isAvailable()) {
+            m_tray->showMessage(QStringLiteral("SnapOCR"),
+                                QStringLiteral("%1 秒后取字…").arg(delay));
+        }
+        QTimer::singleShot(delay * 1000, this, [this]() {
+            m_delayPending = false;
+            beginCaptureNow(m_delayOcrMode);
+        });
+        return;
     }
-    m_overlayController->beginOcrCapture();
+    if (m_delayPending) {
+        return;
+    }
+    beginCaptureNow(true);
 }
 
 void Application::onCopyRequested(const QImage& image)
@@ -527,6 +580,10 @@ void Application::applySettings(const common::AppSettings& incoming)
             }
             return;
         }
+    }
+
+    if (m_overlayController != nullptr) {
+        m_overlayController->setIncludeCursor(m_settings.includeCursor);
     }
 
     if (m_settings.theme != previous.theme) {

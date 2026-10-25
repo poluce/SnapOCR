@@ -55,6 +55,7 @@ private:
     void updateHotkeyLabels();
 
     void startCapture();
+    void beginCaptureNow(bool ocrMode);
     void startOcrCapture();
     void onCopyRequested(const QImage& image);
     void onSaveRequested(const QImage& image);
@@ -86,6 +87,10 @@ private:
     QPointer<ui::OcrResultDialog> m_ocrDialog;
     QImage m_lastOcrImage;
     bool m_initialized = false;
+
+    // 延时截图：倒计时期间忽略重复触发，到点后按记录的模式开始捕获。
+    bool m_delayPending = false;
+    bool m_delayOcrMode = false;
 };
 
 }  // namespace snapocr::app

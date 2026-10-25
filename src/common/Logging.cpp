@@ -4,7 +4,9 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QFile>
 #include <QMutex>
 #include <QMutexLocker>
@@ -287,6 +289,17 @@ void installLogging(const QString& logDir, const QString& level)
 
 QString defaultLogDirectory()
 {
+    // 便携模式：exe 同目录存在 SnapOCR.portable 时，日志写到 exe 旁边的 logs/，
+    // 与配置文件保持一致（配置路径见 SettingsStore::defaultFilePath）。
+    const QCoreApplication* application = QCoreApplication::instance();
+    if (application != nullptr && QFileInfo::exists(QDir(QCoreApplication::applicationDirPath())
+                                                        .filePath(QStringLiteral(
+                                                            "SnapOCR.portable")))) {
+        return QDir(QDir(QCoreApplication::applicationDirPath())
+                        .filePath(QStringLiteral("logs")))
+            .absolutePath();
+    }
+
     QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     if (base.isEmpty()) {
         base = QDir::homePath() + QStringLiteral("/AppData/Local/SnapOCR");

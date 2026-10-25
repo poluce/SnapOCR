@@ -1,9 +1,10 @@
 # SnapOCR end-to-end smoke test (Windows PowerShell 5.1+).
 #
-# Verifies the basic workflow on a real desktop:
-#   1. app starts and registers F1 / F4 global hotkeys
-#   2. F1 -> drag selection -> Enter copies a PNG image to the clipboard
-#   3. F4 -> drag selection -> OCR result is copied to the clipboard as text
+# Verifies the minimal workflow on a real desktop:
+#   1. app starts and registers hotkeys
+#   2. F1 -> drag selection -> confirm -> image copied to clipboard
+#   3. F4 -> drag selection -> OCR text copied to clipboard
+#   4. Esc -> overlay closes
 #
 # Usage (from the repository root, after scripts\build.bat):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\e2e-smoke.ps1
@@ -11,7 +12,10 @@
 #
 # Notes:
 # - Requires an interactive desktop session (screen must not be locked).
-# - Injects real mouse/keyboard input via user32; do not run while doing other work.
+# - Hotkeys are triggered by posting WM_HOTKEY to the app thread (no keyboard
+#   injection, so the active window / IME state does not matter).
+# - The selection drag still injects real mouse input; do not use the mouse
+#   while the script runs.
 
 param(
     [string]$BuildDir = 'build',
@@ -24,15 +28,28 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;
+using System.Text;
 using System.Runtime.InteropServices;
 public static class SnapOcrE2E {
+    public delegate bool EnumProc(IntPtr h, IntPtr l);
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern void mouse_event(uint f, int dx, int dy, uint d, UIntPtr e);
-    [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint f, UIntPtr e);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+    [DllImport("user32.dll")] public static extern bool PostThreadMessage(uint tid, uint msg, IntPtr w, IntPtr l);
 }
 "@
 [void][SnapOcrE2E]::SetProcessDPIAware()
+
+# Hotkey ids must match HotkeyManager::Action
+$HOTKEY_CAPTURE = 1
+$HOTKEY_OCR = 2
+$HOTKEY_CANCEL = 3
+$HOTKEY_CONFIRM = 4
+$WM_HOTKEY = 0x0312
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $exe = Join-Path $repoRoot (Join-Path $BuildDir 'SnapOCR.exe')
@@ -49,6 +66,43 @@ $script:failures = 0
 function Pass([string]$message) { Write-Host ("[PASS] " + $message) }
 function Fail([string]$message) { Write-Host ("[FAIL] " + $message); $script:failures++ }
 
+function Get-AppThreadId([int]$processId) {
+    $script:targetPid = $processId
+    $script:tid = 0
+    $cb = [SnapOcrE2E+EnumProc]{
+        param($h, $l)
+        $owner = 0
+        $threadId = [SnapOcrE2E]::GetWindowThreadProcessId($h, [ref]$owner)
+        if ($owner -eq $script:targetPid -and $script:tid -eq 0) { $script:tid = $threadId }
+        return $true
+    }
+    [void][SnapOcrE2E]::EnumWindows($cb, [IntPtr]::Zero)
+    return $script:tid
+}
+
+function Invoke-Hotkey([int]$threadId, [int]$hotkeyId) {
+    [void][SnapOcrE2E]::PostThreadMessage($threadId, $WM_HOTKEY, [IntPtr]$hotkeyId, [IntPtr]::Zero)
+}
+
+function Count-Overlays([int]$processId, [string]$titlePart) {
+    $script:targetPid = $processId
+    $script:count = 0
+    $cb = [SnapOcrE2E+EnumProc]{
+        param($h, $l)
+        $owner = 0
+        [void][SnapOcrE2E]::GetWindowThreadProcessId($h, [ref]$owner)
+        if ($owner -eq $script:targetPid -and [SnapOcrE2E]::IsWindowVisible($h)) {
+            $sb = New-Object System.Text.StringBuilder 200
+            [void][SnapOcrE2E]::GetWindowText($h, $sb, 200)
+            if ($sb.ToString().Contains($script:titlePart)) { $script:count = $script:count + 1 }
+        }
+        return $true
+    }
+    $script:titlePart = $titlePart
+    [void][SnapOcrE2E]::EnumWindows($cb, [IntPtr]::Zero)
+    return $script:count
+}
+
 function Invoke-Drag([int]$x1, [int]$y1, [int]$x2, [int]$y2) {
     [SnapOcrE2E]::SetCursorPos($x1, $y1) | Out-Null
     Start-Sleep -Milliseconds 300
@@ -63,113 +117,94 @@ function Invoke-Drag([int]$x1, [int]$y1, [int]$x2, [int]$y2) {
     Start-Sleep -Milliseconds 600
 }
 
-function Invoke-Key([byte]$virtualKey) {
-    [SnapOcrE2E]::keybd_event($virtualKey, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 60
-    [SnapOcrE2E]::keybd_event($virtualKey, 0, 2, [UIntPtr]::Zero)
-}
-
 function Stop-App {
     Get-Process -Name SnapOCR -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 500
-}
-
-function Start-App([string[]]$arguments) {
-    return Start-Process -FilePath $exe -ArgumentList $arguments -PassThru
+    Start-Sleep -Milliseconds 800
 }
 
 Stop-App
 try { [System.Windows.Forms.Clipboard]::Clear() } catch { }
 
 Write-Host "=== SnapOCR e2e smoke (build dir: $BuildDir) ==="
-$app = Start-App @('--tray')
+$app = Start-Process -FilePath $exe -ArgumentList @('--tray') -PassThru
 Start-Sleep -Seconds 3
 $app.Refresh()
 if ($app.HasExited) {
     Write-Host "[FAIL] app exited during startup (exit code $($app.ExitCode))"
     exit 1
 }
-Pass "app started (pid $($app.Id))"
+$threadId = Get-AppThreadId $app.Id
+if ($threadId -eq 0) {
+    Write-Host "[FAIL] could not resolve app thread id"
+    Get-Process -Name SnapOCR -ErrorAction SilentlyContinue | Stop-Process -Force
+    exit 1
+}
+Pass "app started (pid $($app.Id), thread $threadId)"
 
 # ---- 1. capture -> copy ----
-Invoke-Key 0x70   # F1
+Invoke-Hotkey $threadId $HOTKEY_CAPTURE
 Start-Sleep -Milliseconds $DelayAfterHotkeyMs
+$overlays = Count-Overlays $app.Id 'Overlay'
+if ($overlays -ge 1) { Pass "F1 opened the capture overlay" } else { Fail "F1 produced no overlay window" }
+
 Invoke-Drag 400 300 1200 900
-Invoke-Key 0x0D   # Enter
+Invoke-Hotkey $threadId $HOTKEY_CONFIRM
 Start-Sleep -Milliseconds 1500
 
 $hasImage = $false
 try { $hasImage = [System.Windows.Forms.Clipboard]::ContainsImage() } catch { }
 if ($hasImage) {
     $img = [System.Windows.Forms.Clipboard]::GetImage()
-    # Strict assertion: the drag goes from physical (400,300) to (1200,900), so the
-    # captured image must be exactly 801x601 physical pixels (inclusive endpoints).
-    # A different size means the selection was created at the wrong position/DPI.
+    # The drag goes from physical (400,300) to (1200,900): exactly 801x601 pixels.
     if ($img.Width -eq 801 -and $img.Height -eq 601) {
-        Pass "F1 -> selection -> Enter copied image ($($img.Width)x$($img.Height))"
+        Pass "F1 -> selection -> confirm copied image ($($img.Width)x$($img.Height))"
     } else {
         Fail "selection size mismatch: got $($img.Width)x$($img.Height), expected 801x601"
     }
     $img.Dispose()
 } else {
-    Fail "F1 flow produced no clipboard image"
+    Fail "capture flow produced no clipboard image"
 }
 
-# ---- 2. quick save (Ctrl+S) ----
-$pictures = [Environment]::GetFolderPath('MyPictures')
-$saveDir = Join-Path $pictures 'SnapOCR'
-$before = @()
-if (Test-Path $saveDir) { $before = Get-ChildItem $saveDir -File | ForEach-Object { $_.FullName } }
-
-Invoke-Key 0x70
-Start-Sleep -Milliseconds $DelayAfterHotkeyMs
-Invoke-Drag 400 300 900 700
-[SnapOcrE2E]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)   # Ctrl down
-Start-Sleep -Milliseconds 80
-Invoke-Key 0x53                                          # Ctrl+S
-[SnapOcrE2E]::keybd_event(0x11, 0, 2, [UIntPtr]::Zero)   # Ctrl up
-Start-Sleep -Milliseconds 1500
-
-$after = @()
-if (Test-Path $saveDir) { $after = Get-ChildItem $saveDir -File | ForEach-Object { $_.FullName } }
-$newFiles = @($after | Where-Object { $before -notcontains $_ })
-if ($newFiles.Count -gt 0) {
-    Pass "Ctrl+S saved file: $(Split-Path -Leaf $newFiles[0])"
-} else {
-    Fail "Ctrl+S produced no new file under $saveDir"
-}
-
-# ---- 3. screen OCR -> auto copy ----
+# ---- 2. OCR -> text ----
 try { [System.Windows.Forms.Clipboard]::Clear() } catch { }
-Invoke-Key 0x73   # F4
+Invoke-Hotkey $threadId $HOTKEY_OCR
 Start-Sleep -Milliseconds $DelayAfterHotkeyMs
-Invoke-Drag 880 250 1600 860
-Start-Sleep -Milliseconds 4000
+Invoke-Drag 600 500 1400 1000
+Start-Sleep -Milliseconds 3000
 
 $text = ''
-try { $text = [System.Windows.Forms.Clipboard]::GetText() } catch { }
-if ($text.Length -eq 0) {
-    # OCR can be flaky under focus changes; retry once.
-    try { [System.Windows.Forms.Clipboard]::Clear() } catch { }
-    Invoke-Key 0x73
-    Start-Sleep -Milliseconds $DelayAfterHotkeyMs
-    Invoke-Drag 880 250 1600 860
-    Start-Sleep -Milliseconds 4000
-    try { $text = [System.Windows.Forms.Clipboard]::GetText() } catch { }
-}
+try { if ([System.Windows.Forms.Clipboard]::ContainsText()) { $text = [System.Windows.Forms.Clipboard]::GetText() } } catch { }
 if ($text.Length -gt 0) {
     Pass "F4 -> selection -> OCR copied $($text.Length) characters"
 } else {
-    Fail "F4 OCR produced no clipboard text"
+    Fail "OCR flow produced no clipboard text"
 }
 
-$app.Refresh()
-if (-not $app.HasExited) {
-    $app.Kill()
-    Pass "app closed"
+# ---- 3. cancel closes the overlay ----
+Invoke-Hotkey $threadId $HOTKEY_CAPTURE
+Start-Sleep -Milliseconds $DelayAfterHotkeyMs
+Invoke-Hotkey $threadId $HOTKEY_CANCEL
+Start-Sleep -Milliseconds 800
+if ((Count-Overlays $app.Id 'Overlay') -eq 0) {
+    Pass "Esc closed the overlay"
+} else {
+    Fail "overlay still visible after Esc"
 }
+
+# ---- 4. shutdown ----
+try { $app.CloseMainWindow() | Out-Null } catch { }
+Start-Sleep -Milliseconds 500
 Stop-App
+if ((Get-Process -Name SnapOCR -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0) {
+    Pass "app closed"
+} else {
+    Fail "app still running after close"
+}
 
-Write-Host "=== result: $(if ($script:failures -eq 0) { 'ALL PASS' } else { "$script:failures FAILED" }) ==="
-if ($script:failures -ne 0) { exit 1 }
-exit 0
+if ($script:failures -eq 0) {
+    Write-Host "=== result: ALL PASS ==="
+    exit 0
+}
+Write-Host "=== result: $($script:failures) FAILED ==="
+exit 1

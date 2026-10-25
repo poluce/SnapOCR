@@ -36,6 +36,11 @@ void OverlayController::setAnnotationStyle(const annotate::AnnotationStyle& styl
     m_style = style;
 }
 
+void OverlayController::setIncludeCursor(bool include)
+{
+    m_includeCursor = include;
+}
+
 void OverlayController::beginCapture()
 {
     if (m_active) {
@@ -43,7 +48,7 @@ void OverlayController::beginCapture()
     }
     m_ocrMode = false;
     m_document.clearItems();
-    m_captureService->captureAllScreens();
+    m_captureService->captureAllScreens(m_includeCursor);
 }
 
 void OverlayController::beginOcrCapture()
@@ -53,7 +58,7 @@ void OverlayController::beginOcrCapture()
     }
     m_ocrMode = true;
     m_document.clearItems();
-    m_captureService->captureAllScreens();
+    m_captureService->captureAllScreens(m_includeCursor);
 }
 
 void OverlayController::requestConfirm()

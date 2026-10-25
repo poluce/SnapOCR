@@ -54,9 +54,26 @@ void SettingsPanel::buildUi()
     connect(m_captureHotkey, &QKeySequenceEdit::editingFinished, this, &SettingsPanel::emitChanged);
     connect(m_ocrHotkey, &QKeySequenceEdit::editingFinished, this, &SettingsPanel::emitChanged);
 
+    // 延时截图：0 = 关闭；到点后自动开始框选
+    m_delaySeconds = new QComboBox(this);
+    m_delaySeconds->addItem(QStringLiteral("关闭"), 0);
+    m_delaySeconds->addItem(QStringLiteral("1 秒"), 1);
+    m_delaySeconds->addItem(QStringLiteral("2 秒"), 2);
+    m_delaySeconds->addItem(QStringLiteral("3 秒"), 3);
+    m_delaySeconds->addItem(QStringLiteral("5 秒"), 5);
+    m_delaySeconds->addItem(QStringLiteral("10 秒"), 10);
+    connect(m_delaySeconds, &QComboBox::currentIndexChanged, this, &SettingsPanel::emitChanged);
+
     root->addWidget(makeRow(QStringLiteral("截图热键"), m_captureHotkey));
     root->addWidget(makeSeparator());
     root->addWidget(makeRow(QStringLiteral("取字热键"), m_ocrHotkey));
+    root->addWidget(makeSeparator());
+    root->addWidget(makeRow(QStringLiteral("延时截图"), m_delaySeconds));
+
+    m_includeCursor = new ToggleSwitch(this);
+    connect(m_includeCursor, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
+    root->addWidget(makeSeparator());
+    root->addWidget(makeToggleRow(QStringLiteral("捕获鼠标光标"), m_includeCursor));
     root->addWidget(makeGroupGap());
 
     // ---- 保存 ----
@@ -291,6 +308,12 @@ void SettingsPanel::setSettings(const common::AppSettings& settings)
         m_themeGroup->buttons().first()->setChecked(true);
     }
 
+    const int delayIndex = m_delaySeconds->findData(settings.delaySeconds);
+    m_delaySeconds->setCurrentIndex(delayIndex < 0 ? 0 : delayIndex);
+
+    m_includeCursor->setChecked(settings.includeCursor);
+    m_includeCursor->setKnobPosition(settings.includeCursor ? 1.0 : 0.0);
+
     m_autoStart->setChecked(settings.startWithWindows);
     m_autoStart->setKnobPosition(settings.startWithWindows ? 1.0 : 0.0);
     m_ocrAutoCopy->setChecked(settings.ocrAutoCopy);
@@ -318,6 +341,8 @@ common::AppSettings SettingsPanel::settings() const
     if (QAbstractButton* checked = m_themeGroup->checkedButton()) {
         result.theme = checked->property("themeKey").toString();
     }
+    result.delaySeconds = m_delaySeconds->currentData().toInt();
+    result.includeCursor = m_includeCursor->isChecked();
     result.startWithWindows = m_autoStart->isChecked();
     result.ocrAutoCopy = m_ocrAutoCopy->isChecked();
     result.logLevel = m_logLevel->currentData().toString();

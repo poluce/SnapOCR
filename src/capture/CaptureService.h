@@ -17,7 +17,8 @@ public:
     explicit CaptureService(QObject* parent = nullptr);
 
     // 抓取所有显示器；失败时发出 failed()。
-    void captureAllScreens();
+    // includeCursor：把鼠标光标画进截图（设置项 capture/includeCursor）。
+    void captureAllScreens(bool includeCursor = false);
 
 signals:
     void captured(const snapocr::capture::CaptureResult& result);

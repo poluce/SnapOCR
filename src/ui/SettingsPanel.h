@@ -54,6 +54,8 @@ private:
     ToggleSwitch* m_autoStart = nullptr;
     ToggleSwitch* m_ocrAutoCopy = nullptr;
     QComboBox* m_logLevel = nullptr;
+    QComboBox* m_delaySeconds = nullptr;
+    ToggleSwitch* m_includeCursor = nullptr;
     bool m_loading = false;
 };
 

@@ -32,6 +32,8 @@ public:
 
     void beginCapture();
     void beginOcrCapture();
+    // 是否把鼠标光标画进截图（来自设置 capture/includeCursor）
+    void setIncludeCursor(bool include);
     void cancel();
 
     // 覆盖层激活期间由全局热键（Esc/Enter）调用，规避窗口无焦点时收不到按键的问题。
@@ -80,6 +82,7 @@ private:
     void focusOverlay();
 
     capture::CaptureService* m_captureService = nullptr;
+    bool m_includeCursor = false;
     capture::CaptureResult m_result;
     QVector<capture::MonitorInfo> m_monitors;
     SelectionModel m_selection;

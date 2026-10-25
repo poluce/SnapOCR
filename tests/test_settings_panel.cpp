@@ -36,6 +36,8 @@ void SettingsPanelTest::settingsRoundTrip()
     input.startWithWindows = true;
     input.ocrAutoCopy = false;
     input.logLevel = QStringLiteral("debug");
+    input.delaySeconds = 3;
+    input.includeCursor = true;
 
     ui::SettingsPanel panel;
     panel.setSettings(input);
@@ -51,6 +53,8 @@ void SettingsPanelTest::settingsRoundTrip()
     QCOMPARE(output.startWithWindows, input.startWithWindows);
     QCOMPARE(output.ocrAutoCopy, input.ocrAutoCopy);
     QCOMPARE(output.logLevel, input.logLevel);
+    QCOMPARE(output.delaySeconds, input.delaySeconds);
+    QCOMPARE(output.includeCursor, input.includeCursor);
 }
 
 void SettingsPanelTest::sliderChangeEmitsSettingsChanged()
