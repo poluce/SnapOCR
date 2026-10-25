@@ -8,6 +8,7 @@
 
 #include <QAbstractSpinBox>
 #include <QApplication>
+#include <QCursor>
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QLoggingCategory>
@@ -37,6 +38,7 @@
 #include "snapocr/Version.h"
 #include "ui/MainWindow.h"
 #include "ui/OcrResultDialog.h"
+#include "ui/PinWindow.h"
 #include "ui/Theme.h"
 
 namespace snapocr::app {
@@ -158,6 +160,8 @@ bool Application::initializeServices()
     m_overlayController = new overlay::OverlayController(this);
     connect(m_overlayController, &overlay::OverlayController::copyRequested, this,
             &Application::onCopyRequested);
+    connect(m_overlayController, &overlay::OverlayController::pinRequested, this,
+            &Application::pinImage);
     connect(m_overlayController, &overlay::OverlayController::saveRequested, this,
             &Application::onSaveRequested);
     connect(m_overlayController, &overlay::OverlayController::ocrRequested, this,
@@ -327,10 +331,12 @@ void Application::registerOverlayHotkeys(bool enabled)
     }
     if (enabled) {
         // 覆盖层显示期间临时占用 Esc / Enter：窗口没焦点时也能退出或确认。
-        m_hotkeys->registerHotkey(HotkeyManager::Action::OverlayCancel, QStringLiteral("Esc"),
-                                  nullptr);
-        m_hotkeys->registerHotkey(HotkeyManager::Action::OverlayConfirm, QStringLiteral("Enter"),
-                                  nullptr);
+        QString err;
+        const bool okCancel = m_hotkeys->registerHotkey(
+            HotkeyManager::Action::OverlayCancel, QStringLiteral("Esc"), &err);
+        QString err2;
+        const bool okConfirm = m_hotkeys->registerHotkey(
+            HotkeyManager::Action::OverlayConfirm, QStringLiteral("Enter"), &err2);
     } else {
         m_hotkeys->unregisterHotkey(HotkeyManager::Action::OverlayCancel);
         m_hotkeys->unregisterHotkey(HotkeyManager::Action::OverlayConfirm);
@@ -419,6 +425,31 @@ void Application::startOcrCapture()
     beginCaptureNow(true);
 }
 
+void Application::pinImage(const QImage& image)
+{
+    if (image.isNull()) {
+        return;
+    }
+    auto* pin = new ui::PinWindow(image);
+    // 贴图窗口出现在光标附近，避免正好盖住选区原位置影响对照。
+    const QPoint cursor = QCursor::pos();
+    pin->move(cursor + QPoint(24, 24));
+    pin->show();
+
+    connect(pin, &ui::PinWindow::copyRequested, this, [this](const QImage& img) {
+        onCopyRequested(img);
+    });
+    connect(pin, &ui::PinWindow::saveRequested, this, [this](const QImage& img) {
+        onSaveRequested(img);
+    });
+    connect(pin, &QObject::destroyed, this, [this, pin]() { m_pins.removeAll(QPointer<ui::PinWindow>(pin)); });
+
+    m_pins.append(QPointer<ui::PinWindow>(pin));
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setStatusText(QStringLiteral("已贴图（滚轮缩放，R 旋转，Esc 关闭）"));
+    }
+}
+
 void Application::onCopyRequested(const QImage& image)
 {
     QString error;
@@ -426,6 +457,11 @@ void Application::onCopyRequested(const QImage& image)
         showInfo(QStringLiteral("已复制到剪贴板（%1 × %2）").arg(image.width()).arg(image.height()));
     } else {
         showError(QStringLiteral("复制失败：%1").arg(error));
+    }
+
+    // F-ANN-20：可配置的“一键复制并贴图”
+    if (m_settings.pinOnCopy) {
+        pinImage(image);
     }
 }
 

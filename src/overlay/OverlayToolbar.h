@@ -36,6 +36,7 @@ signals:
     void toolSelected(snapocr::annotate::AnnotationKind kind);
     void selectToolSelected();
     void copyRequested();
+    void pinRequested();
     void saveRequested();
     void ocrRequested();
     void cancelRequested();

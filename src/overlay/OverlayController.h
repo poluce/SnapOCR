@@ -49,6 +49,7 @@ public:
 signals:
     void started();
     void copyRequested(const QImage& image);
+    void pinRequested(const QImage& image);
     void colorPicked(const QString& hex);
     void saveRequested(const QImage& image);
     void ocrRequested(const QImage& image);
@@ -76,6 +77,7 @@ private:
     QImage croppedSelection() const;
 
     void requestCopy();
+    void requestPin();
     void updateMagnifierFromCursor();
     void finishPendingTextInput();
     void requestSave();

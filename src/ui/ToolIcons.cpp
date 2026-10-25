@@ -179,6 +179,12 @@ void drawAction(QPainter& painter, const QString& action)
         painter.drawLine(QPointF(6.5, 6.5), QPointF(8, 4));
         painter.drawLine(QPointF(8, 4), QPointF(12, 4));
         painter.drawLine(QPointF(12, 4), QPointF(13.5, 6.5));
+    } else if (action == QLatin1String("pin")) {
+        // 图钉：斜向针身 + 圆头 + 底部针尖
+        painter.drawLine(QPointF(13, 3), QPointF(7, 9));
+        painter.drawLine(QPointF(9, 2), QPointF(15, 8));
+        painter.drawLine(QPointF(7, 9), QPointF(3, 17));
+        painter.drawEllipse(QPointF(13, 1.5), 2.2, 2.2);
     } else if (action == QLatin1String("settings")) {
         // 三条带滑块的设置线条
         painter.drawLine(QPointF(3, 6), QPointF(17, 6));

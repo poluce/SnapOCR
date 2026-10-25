@@ -165,11 +165,15 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     auto* saveButton = makeButton(ui::actionIcon(QStringLiteral("save"), kToolbarInk), QStringLiteral("保存 Ctrl+S"));
     auto* copyButton = makeButton(ui::actionIcon(QStringLiteral("confirm"), kToolbarInk), QStringLiteral("复制到剪贴板 Enter"));
     copyButton->setObjectName(QStringLiteral("copyButton"));
+    auto* pinButton = makeButton(ui::actionIcon(QStringLiteral("pin"), kToolbarInk),
+                                 QStringLiteral("贴图到屏幕（置顶显示）"));
+    pinButton->setObjectName(QStringLiteral("pinButton"));
     auto* cancelButton = makeButton(ui::actionIcon(QStringLiteral("close"), kToolbarInk), QStringLiteral("取消 Esc"));
     cancelButton->setObjectName(QStringLiteral("cancelButton"));
     connect(ocrButton, &QToolButton::clicked, this, [this]() { emit ocrRequested(); });
     connect(saveButton, &QToolButton::clicked, this, [this]() { emit saveRequested(); });
     connect(copyButton, &QToolButton::clicked, this, [this]() { emit copyRequested(); });
+    connect(pinButton, &QToolButton::clicked, this, [this]() { emit pinRequested(); });
     connect(cancelButton, &QToolButton::clicked, this, [this]() { emit cancelRequested(); });
 
     // 单行排列：工具 | 撤销重做 | 颜色线宽 | 动作
@@ -180,6 +184,7 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     rootLayout->addWidget(makeSeparator());
     rootLayout->addWidget(ocrButton);
     rootLayout->addWidget(saveButton);
+    rootLayout->addWidget(pinButton);
     rootLayout->addWidget(cancelButton);
     rootLayout->addWidget(copyButton);  // 勾号固定在最右侧
 

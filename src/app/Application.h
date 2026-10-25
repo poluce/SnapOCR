@@ -9,10 +9,13 @@
 #include <memory>
 
 #include "common/Settings.h"
+
+#include <QVector>
 #include "ocr/OcrTypes.h"
 
 namespace snapocr::ui {
 class MainWindow;
+class PinWindow;
 class OcrResultDialog;
 }
 
@@ -58,6 +61,7 @@ private:
     void beginCaptureNow(bool ocrMode);
     void startOcrCapture();
     void onCopyRequested(const QImage& image);
+    void pinImage(const QImage& image);
     void onSaveRequested(const QImage& image);
     void onCaptureError(const QString& message);
 
@@ -85,6 +89,8 @@ private:
 
     std::unique_ptr<ui::MainWindow> m_mainWindow;
     QPointer<ui::OcrResultDialog> m_ocrDialog;
+    // 贴图窗口列表（Qt::WA_DeleteOnClose，析构自动移除）
+    QVector<QPointer<ui::PinWindow>> m_pins;
     QImage m_lastOcrImage;
     bool m_initialized = false;
 

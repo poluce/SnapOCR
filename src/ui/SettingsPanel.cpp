@@ -177,6 +177,12 @@ void SettingsPanel::buildUi()
     root->addWidget(makeToggleRow(QStringLiteral("识别后自动复制"), m_ocrAutoCopy));
     root->addWidget(makeGroupGap());
 
+    // ---- 贴图（F-ANN-20：复制后自动钉到屏幕上） ----
+    m_pinOnCopy = new ToggleSwitch(this);
+    connect(m_pinOnCopy, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
+    root->addWidget(makeToggleRow(QStringLiteral("复制后自动贴图"), m_pinOnCopy));
+    root->addWidget(makeGroupGap());
+
     // ---- 高级 ----
     m_logLevel = new QComboBox(this);
     m_logLevel->addItem(QStringLiteral("错误"), QStringLiteral("error"));
@@ -314,6 +320,9 @@ void SettingsPanel::setSettings(const common::AppSettings& settings)
     m_includeCursor->setChecked(settings.includeCursor);
     m_includeCursor->setKnobPosition(settings.includeCursor ? 1.0 : 0.0);
 
+    m_pinOnCopy->setChecked(settings.pinOnCopy);
+    m_pinOnCopy->setKnobPosition(settings.pinOnCopy ? 1.0 : 0.0);
+
     m_autoStart->setChecked(settings.startWithWindows);
     m_autoStart->setKnobPosition(settings.startWithWindows ? 1.0 : 0.0);
     m_ocrAutoCopy->setChecked(settings.ocrAutoCopy);
@@ -343,6 +352,7 @@ common::AppSettings SettingsPanel::settings() const
     }
     result.delaySeconds = m_delaySeconds->currentData().toInt();
     result.includeCursor = m_includeCursor->isChecked();
+    result.pinOnCopy = m_pinOnCopy->isChecked();
     result.startWithWindows = m_autoStart->isChecked();
     result.ocrAutoCopy = m_ocrAutoCopy->isChecked();
     result.logLevel = m_logLevel->currentData().toString();

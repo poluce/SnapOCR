@@ -31,6 +31,8 @@ struct AppSettings
     // OCR
     QString ocrEngine = QStringLiteral("windows");  // windows / rapidocr(阶段二)
     bool ocrAutoCopy = true;
+    // 贴图：复制后是否自动贴到屏幕上（F-ANN-20）
+    bool pinOnCopy = false;
     QString ocrLanguage;  // 空 = 跟随系统
 
     // 保存

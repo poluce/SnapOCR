@@ -2,6 +2,7 @@
 
 #include "overlay/ColorMagnifier.h"
 
+#include <QDebug>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>

@@ -214,6 +214,7 @@ void OverlayController::showToolbar()
             }
         });
         connect(m_toolbar, &OverlayToolbar::copyRequested, this, &OverlayController::requestCopy);
+        connect(m_toolbar, &OverlayToolbar::pinRequested, this, &OverlayController::requestPin);
         connect(m_toolbar, &OverlayToolbar::saveRequested, this, &OverlayController::requestSave);
         connect(m_toolbar, &OverlayToolbar::ocrRequested, this, &OverlayController::requestOcr);
         connect(m_toolbar, &OverlayToolbar::cancelRequested, this, &OverlayController::cancel);
@@ -479,6 +480,16 @@ void OverlayController::requestCopy()
     const QImage image = currentImage();
     if (!image.isNull()) {
         emit copyRequested(image);
+    }
+    finish();
+}
+
+void OverlayController::requestPin()
+{
+    finishPendingTextInput();
+    const QImage image = currentImage();
+    if (!image.isNull()) {
+        emit pinRequested(image);
     }
     finish();
 }
