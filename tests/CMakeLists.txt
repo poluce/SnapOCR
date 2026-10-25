@@ -6,6 +6,14 @@ function(snapocr_add_test name)
     snapocr_set_common_options(${name})
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # i18n 测试需要和运行期一致的翻译目录
+    if(TARGET snapocr_translations)
+        add_dependencies(${name} snapocr_translations)
+        add_custom_command(TARGET ${name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${SNAPCOR_TRANSLATIONS_OUTPUT_DIR}"
+                    "$<TARGET_FILE_DIR:${name}>/translations")
+    endif()
 endfunction()
 
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp")

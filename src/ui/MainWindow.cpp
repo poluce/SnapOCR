@@ -92,14 +92,14 @@ void MainWindow::buildUi()
     contentLayout->setSpacing(6);
 
     // ---- 操作入口（紧凑两行，不再放大标题/说明） ----
-    m_captureButton = makeActionCard(QStringLiteral("camera"), QStringLiteral("截图"),
+    m_captureButton = makeActionCard(QStringLiteral("camera"), tr("截图"),
                                      &m_captureHotkeyBadge, content);
-    m_ocrButton = makeActionCard(QStringLiteral("ocr"), QStringLiteral("屏幕取字"),
+    m_ocrButton = makeActionCard(QStringLiteral("ocr"), tr("屏幕取字"),
                                  &m_ocrHotkeyBadge, content);
     contentLayout->addWidget(m_captureButton);
     contentLayout->addWidget(m_ocrButton);
 
-    m_historyButton = makeActionCard(QStringLiteral("history"), QStringLiteral("截图历史"),
+    m_historyButton = makeActionCard(QStringLiteral("history"), tr("截图历史"),
                                      nullptr, content);
     contentLayout->addWidget(m_historyButton);
 
@@ -128,7 +128,7 @@ void MainWindow::buildUi()
     auto* footerLayout = new QHBoxLayout(footer);
     footerLayout->setContentsMargins(0, 0, 0, 0);
     footerLayout->setSpacing(8);
-    m_statusLabel = new QLabel(QStringLiteral("就绪"), footer);
+    m_statusLabel = new QLabel(tr("就绪"), footer);
     m_statusLabel->setObjectName(QStringLiteral("statusLabel"));
     footerLayout->addWidget(m_statusLabel, 1);
 

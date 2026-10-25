@@ -48,6 +48,15 @@ void SettingsPanel::buildUi()
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(2);
 
+    // ---- 界面语言（阶段三 i18n 骨架：切换后重启生效） ----
+    m_language = new QComboBox(this);
+    m_language->addItem(QStringLiteral("简体中文"), QStringLiteral("zh-CN"));
+    m_language->addItem(QStringLiteral("English"), QStringLiteral("en-US"));
+    m_language->setToolTip(QStringLiteral("界面语言切换后需要重启 SnapOCR 生效"));
+    connect(m_language, &QComboBox::currentIndexChanged, this, &SettingsPanel::emitChanged);
+    root->addWidget(makeRow(QStringLiteral("界面语言"), m_language));
+    root->addWidget(makeSeparator());
+
     // ---- 热键 ----
     m_captureHotkey = new QKeySequenceEdit(this);
     m_captureHotkey->setMaximumSequenceLength(1);
@@ -325,6 +334,9 @@ void SettingsPanel::setSettings(const common::AppSettings& settings)
     const int delayIndex = m_delaySeconds->findData(settings.delaySeconds);
     m_delaySeconds->setCurrentIndex(delayIndex < 0 ? 0 : delayIndex);
 
+    const int languageIndex = m_language->findData(settings.language);
+    m_language->setCurrentIndex(languageIndex < 0 ? 0 : languageIndex);
+
     m_detectWindows->setChecked(settings.detectWindows);
     m_detectWindows->setKnobPosition(settings.detectWindows ? 1.0 : 0.0);
 
@@ -364,6 +376,7 @@ common::AppSettings SettingsPanel::settings() const
     result.delaySeconds = m_delaySeconds->currentData().toInt();
     result.includeCursor = m_includeCursor->isChecked();
     result.detectWindows = m_detectWindows->isChecked();
+    result.language = m_language->currentData().toString();
     result.pinOnCopy = m_pinOnCopy->isChecked();
     result.startWithWindows = m_autoStart->isChecked();
     result.ocrAutoCopy = m_ocrAutoCopy->isChecked();

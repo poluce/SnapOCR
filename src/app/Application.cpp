@@ -42,6 +42,7 @@
 #include "platform/win32/WindowActivation.h"
 #include "snapocr/Version.h"
 #include "history/HistoryStore.h"
+#include "i18n/Translator.h"
 #include "ui/HistoryDialog.h"
 #include "ui/MainWindow.h"
 #include "ui/OcrResultDialog.h"
@@ -56,6 +57,40 @@
 namespace snapocr::app {
 
 namespace {
+
+// 把虚拟桌面物理矩形换算成 Qt 逻辑矩形（逐屏匹配 DPR）。
+QRect physicalRectToLogical(const QRect& physical)
+{
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        const QRect logical = screen->geometry();
+        const qreal dpr = screen->devicePixelRatio();
+        const QRect physicalGeometry(
+            QPoint(qRound(logical.x() * dpr), qRound(logical.y() * dpr)),
+            QSize(qRound(logical.width() * dpr), qRound(logical.height() * dpr)));
+        if (physicalGeometry.intersects(physical)) {
+            const QRect overlap = physicalGeometry.intersected(physical);
+            return QRect(
+                QPoint(logical.x() + qRound((overlap.x() - physicalGeometry.x()) / dpr),
+                       logical.y() + qRound((overlap.y() - physicalGeometry.y()) / dpr)),
+                QSize(qRound(overlap.width() / dpr), qRound(overlap.height() / dpr)));
+        }
+    }
+    return physical;
+}
+
+// 逻辑矩形所在的屏幕（取第一个相交的屏幕，找不到就用主屏）。
+QRect screenLogicalFor(const QRect& logicalRect)
+{
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        if (screen->geometry().intersects(logicalRect)) {
+            return screen->geometry();
+        }
+    }
+    if (const QScreen* primary = QGuiApplication::primaryScreen()) {
+        return primary->geometry();
+    }
+    return QRect(0, 0, 1920, 1080);
+}
 
 // 把虚拟桌面物理坐标换算成 Qt 逻辑坐标（多屏不同 DPR 时逐屏匹配）。
 QPoint physicalToLogicalPoint(const QPoint& physical)
@@ -168,6 +203,8 @@ bool Application::initializeServices()
                                                          : common::defaultLogDirectory(),
                            m_settings.logLevel);
     ui::applyTheme(m_settings.theme);
+    i18n::installUiTranslator(qobject_cast<QApplication*>(QApplication::instance()),
+                              m_settings.language);
 
     if (!warning.isEmpty()) {
         qWarning("设置读取：%s", qUtf8Printable(warning));
@@ -510,6 +547,41 @@ void Application::startScrollingCapture(const QRect& physicalRect)
         m_scrolling->setFrameProvider([this](QImage* image, QString* error) {
             return platform::win32::ScreenCapture::captureRegion(m_scrollingRegion, image, error);
         });
+        // 注意：lambda 连接不支持 Qt::UniqueConnection，必须在创建时只连一次；
+        // 否则每次开始长截图都会再连一份，导致 finished 被多次处理。
+        connect(m_scrolling, &capture::ScrollingCaptureController::finished, this,
+                [this](const QImage& image) {
+                    if (m_scrollingBar != nullptr) {
+                        m_scrollingBar->close();
+                    }
+                    registerOverlayHotkeys(false);
+                    recordHistory(image);
+                    QString error;
+                    if (platform::win32::copyImageToClipboard(image, &error)) {
+                        showInfo(QStringLiteral("长截图完成（%1 × %2），已复制到剪贴板")
+                                     .arg(image.width())
+                                     .arg(image.height()));
+                    } else {
+                        showInfo(QStringLiteral("长截图完成（%1 × %2），但复制失败：%3")
+                                     .arg(image.width())
+                                     .arg(image.height())
+                                     .arg(error));
+                    }
+                });
+        connect(m_scrolling, &capture::ScrollingCaptureController::failed, this,
+                [this](const QString& message) {
+                    if (m_scrollingBar != nullptr) {
+                        m_scrollingBar->close();
+                    }
+                    registerOverlayHotkeys(false);
+                    showError(QStringLiteral("长截图失败：%1").arg(message));
+                });
+        connect(m_scrolling, &capture::ScrollingCaptureController::progress, this,
+                [this](int frames, int height) {
+                    if (m_scrollingBar != nullptr) {
+                        m_scrollingBar->setProgress(frames, height);
+                    }
+                });
     }
     // 记录区域：provider 是静态 lambda，用成员变量传递当前区域
     m_scrollingRegion = physicalRect;
@@ -525,52 +597,33 @@ void Application::startScrollingCapture(const QRect& physicalRect)
         m_scrollingBar = bar;
     }
 
-    connect(m_scrolling, &capture::ScrollingCaptureController::progress, m_scrollingBar.data(),
-            [this](int frames, int height) {
-                if (m_scrollingBar != nullptr) {
-                    m_scrollingBar->setProgress(frames, height);
-                }
-            },
-            Qt::UniqueConnection);
-    connect(m_scrolling, &capture::ScrollingCaptureController::finished, this,
-            [this](const QImage& image) {
-                if (m_scrollingBar != nullptr) {
-                    m_scrollingBar->close();
-                }
-                registerOverlayHotkeys(false);
-                recordHistory(image);
-                QString error;
-                if (platform::win32::copyImageToClipboard(image, &error)) {
-                    showInfo(QStringLiteral("长截图完成（%1 × %2），已复制到剪贴板")
-                                 .arg(image.width())
-                                 .arg(image.height()));
-                } else {
-                    showInfo(QStringLiteral("长截图完成（%1 × %2），但复制失败：%3")
-                                 .arg(image.width())
-                                 .arg(image.height())
-                                 .arg(error));
-                }
-            },
-            Qt::UniqueConnection);
-    connect(m_scrolling, &capture::ScrollingCaptureController::failed, this,
-            [this](const QString& message) {
-                if (m_scrollingBar != nullptr) {
-                    m_scrollingBar->close();
-                }
-                registerOverlayHotkeys(false);
-                showError(QStringLiteral("长截图失败：%1").arg(message));
-            },
-            Qt::UniqueConnection);
 
     // 期间用 Esc/Enter 控制：复用覆盖层的全局热键（窗口没有焦点也能用）
     registerOverlayHotkeys(true);
 
     m_scrolling->start(physicalRect);
     if (m_scrollingBar != nullptr) {
-        // 放在选区左下角附近，避免遮挡滚动内容
-        const QPoint physicalAnchor =
-            m_scrollingRegion.topLeft() + QPoint(0, m_scrollingRegion.height());
-        m_scrollingBar->move(physicalToLogicalPoint(physicalAnchor) + QPoint(0, 12));
+        // 控制条必须落在截取区域之外，否则会被抓进长图里。
+        // 依次尝试：区域下方 → 区域上方 → 屏幕左上角，取第一个不与区域相交的位置。
+        const QSize barSize = m_scrollingBar->size();
+        const QRect regionLogical = physicalRectToLogical(m_scrollingRegion);
+        const QRect screenLogical = screenLogicalFor(regionLogical);
+        QPoint position = regionLogical.topLeft() + QPoint(0, regionLogical.height() + 12);
+        const QRect belowRect(position, barSize);
+        if (!belowRect.intersects(regionLogical) && screenLogical.contains(belowRect)) {
+            m_scrollingBar->move(position);
+        } else {
+            position = QPoint(regionLogical.left(), regionLogical.top() - barSize.height() - 12);
+            const QRect aboveRect(position, barSize);
+            if (!aboveRect.intersects(regionLogical) && screenLogical.contains(aboveRect)) {
+                m_scrollingBar->move(position);
+            } else {
+                // 区域占满整屏：放到屏幕上边角，并保证不与区域相交已不可能，
+                // 此时让控制条半透明，尽量减少对截图的影响。
+                m_scrollingBar->move(screenLogical.topLeft() + QPoint(12, 12));
+                m_scrollingBar->setWindowOpacity(0.85);
+            }
+        }
         m_scrollingBar->show();
         m_scrollingBar->raise();
     }
@@ -632,7 +685,14 @@ void Application::pinImage(const QImage& image)
     connect(pin, &ui::PinWindow::saveRequested, this, [this](const QImage& img) {
         onSaveRequested(img);
     });
-    connect(pin, &QObject::destroyed, this, [this, pin]() { m_pins.removeAll(QPointer<ui::PinWindow>(pin)); });
+    connect(pin, &QObject::destroyed, this, [this, pin]() {
+        // 析构期间不要再用 QPointer(pin) 构造（对象已处于销毁中），按裸指针过滤
+        for (int i = m_pins.size() - 1; i >= 0; --i) {
+            if (m_pins.at(i).data() == pin || m_pins.at(i).isNull()) {
+                m_pins.removeAt(i);
+            }
+        }
+    });
 
     m_pins.append(QPointer<ui::PinWindow>(pin));
     if (m_mainWindow != nullptr) {
@@ -834,6 +894,11 @@ void Application::applySettings(const common::AppSettings& incoming)
 
     if (m_settings.theme != previous.theme) {
         ui::applyTheme(m_settings.theme);
+    }
+    if (m_settings.language != previous.language) {
+        // 翻译器切换后文字由 Qt 在下一次界面重建/语言事件时生效；此处只负责加载
+        i18n::installUiTranslator(qobject_cast<QApplication*>(QApplication::instance()),
+                                  m_settings.language);
     }
 
     if (m_settings.startWithWindows != previous.startWithWindows) {

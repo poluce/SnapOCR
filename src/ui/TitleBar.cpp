@@ -42,7 +42,7 @@ TitleBar::TitleBar(const QString& title, QWidget* parent, bool showMinimize, boo
         m_minimizeButton = new QToolButton(this);
         m_minimizeButton->setObjectName(QStringLiteral("titleBarButton"));
         m_minimizeButton->setText(QStringLiteral("\u2013"));
-        m_minimizeButton->setToolTip(QStringLiteral("最小化"));
+        m_minimizeButton->setToolTip(tr("最小化"));
         m_minimizeButton->setCursor(Qt::ArrowCursor);
         m_minimizeButton->setFixedSize(32, 28);
         layout->addWidget(m_minimizeButton);
@@ -53,7 +53,7 @@ TitleBar::TitleBar(const QString& title, QWidget* parent, bool showMinimize, boo
         m_closeButton = new QToolButton(this);
         m_closeButton->setObjectName(QStringLiteral("titleBarClose"));
         m_closeButton->setText(QStringLiteral("\u2715"));
-        m_closeButton->setToolTip(QStringLiteral("关闭到托盘"));
+        m_closeButton->setToolTip(tr("关闭"));
         m_closeButton->setCursor(Qt::ArrowCursor);
         m_closeButton->setFixedSize(32, 28);
         layout->addWidget(m_closeButton);

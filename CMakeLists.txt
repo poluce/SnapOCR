@@ -90,10 +90,52 @@ endif()
 
 snapocr_set_common_options(snapocr_core)
 
+# ---- 界面翻译（阶段三 i18n 骨架）----
+# .ts 源文件在 translations/；用 Qt 自带的 lrelease 编译成 .qm，
+# 输出到 build/translations 并复制到 exe 同目录（运行期从那里加载）。
+find_program(SNAPCOR_LRELEASE
+    NAMES lrelease lrelease.exe
+    HINTS "${QT_BIN_DIR}" "$ENV{QTDIR}/bin"
+    PATH_SUFFIXES ""
+)
+set(SNAPCOR_TRANSLATIONS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/translations")
+if(SNAPCOR_LRELEASE)
+    set(SNAPCOR_QM_FILES "")
+    file(GLOB SNAPCOR_TS_FILES "${CMAKE_CURRENT_SOURCE_DIR}/translations/*.ts")
+    foreach(ts_file ${SNAPCOR_TS_FILES})
+        get_filename_component(ts_name ${ts_file} NAME_WE)
+        set(qm_file "${SNAPCOR_TRANSLATIONS_OUTPUT_DIR}/${ts_name}.qm")
+        add_custom_command(
+            OUTPUT ${qm_file}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${SNAPCOR_TRANSLATIONS_OUTPUT_DIR}
+            COMMAND ${SNAPCOR_LRELEASE} ${ts_file} -qm ${qm_file}
+            DEPENDS ${ts_file}
+            COMMENT "lrelease ${ts_name}.ts"
+            VERBATIM
+        )
+        list(APPEND SNAPCOR_QM_FILES ${qm_file})
+    endforeach()
+    if(SNAPCOR_QM_FILES)
+        add_custom_target(snapocr_translations ALL DEPENDS ${SNAPCOR_QM_FILES})
+    endif()
+else()
+    message(STATUS "lrelease not found - UI translations will not be compiled")
+endif()
+
 # 产品可执行文件：Windows GUI 子系统，运行时不弹控制台
 add_executable(SnapOCR WIN32
     src/main.cpp
 )
+
+if(TARGET snapocr_translations)
+    add_dependencies(SnapOCR snapocr_translations)
+    add_custom_command(TARGET SnapOCR POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${SNAPCOR_TRANSLATIONS_OUTPUT_DIR}"
+                "$<TARGET_FILE_DIR:SnapOCR>/translations"
+        COMMENT "Copy UI translations next to SnapOCR.exe"
+    )
+endif()
 
 target_link_libraries(SnapOCR PRIVATE snapocr_core)
 snapocr_set_common_options(SnapOCR)
