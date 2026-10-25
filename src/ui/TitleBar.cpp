@@ -1,5 +1,7 @@
 #include "ui/TitleBar.h"
 
+#include "ui/Theme.h"
+
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMouseEvent>
@@ -94,9 +96,10 @@ void TitleBar::paintEvent(QPaintEvent* event)
     path.addRoundedRect(QRectF(rect()), radius, radius);
     QPainterPath bottomRect;
     bottomRect.addRect(QRectF(0, height() - radius, width(), radius));
-    painter.fillPath(path.united(bottomRect), QColor(0xFF, 0xFF, 0xFF));
+    const ui::ThemeColors colors = ui::themeColors();
+    painter.fillPath(path.united(bottomRect), colors.surface);
 
-    painter.setPen(QPen(QColor(0xE6, 0xE9, 0xEE), 1));
+    painter.setPen(QPen(colors.border, 1));
     painter.drawLine(0, height() - 1, width(), height() - 1);
 }
 

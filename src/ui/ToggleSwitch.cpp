@@ -1,5 +1,7 @@
 #include "ui/ToggleSwitch.h"
 
+#include "ui/Theme.h"
+
 #include <QPainter>
 #include <QPropertyAnimation>
 
@@ -12,10 +14,11 @@ constexpr int kMargin = 3;
 constexpr int kDurationMs = 120;
 
 const QColor kTrackOff(0xD5, 0xD9, 0xE0);
-const QColor kTrackOffHover(0xC7, 0xCC, 0xD4);
-const QColor kTrackOn(0x1F, 0x6F, 0xEB);
-const QColor kTrackOnHover(0x1A, 0x5F, 0xD0);
-const QColor kKnob(0xFF, 0xFF, 0xFF);
+QColor trackOff() { return ui::isDarkTheme() ? QColor(0x4A, 0x4E, 0x55) : QColor(0xD8, 0xDC, 0xE3); }
+QColor trackOffHover() { return ui::isDarkTheme() ? QColor(0x5A, 0x5F, 0x67) : QColor(0xC7, 0xCC, 0xD4); }
+QColor trackOn() { return ui::themeColors().accent; }
+QColor trackOnHover() { return ui::themeColors().accent.darker(110); }
+QColor knobColor() { return ui::isDarkTheme() ? QColor(0xF0, 0xF2, 0xF5) : QColor(0xFF, 0xFF, 0xFF); }
 
 }  // namespace
 
@@ -81,8 +84,8 @@ void ToggleSwitch::paintEvent(QPaintEvent* event)
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     const qreal radius = height() / 2.0;
-    QColor track = isChecked() ? (m_hovered ? kTrackOnHover : kTrackOn)
-                               : (m_hovered ? kTrackOffHover : kTrackOff);
+    QColor track = isChecked() ? (m_hovered ? trackOnHover() : trackOn())
+                               : (m_hovered ? trackOffHover() : kTrackOff);
     if (!isEnabled()) {
         track.setAlpha(110);
     }
@@ -95,11 +98,15 @@ void ToggleSwitch::paintEvent(QPaintEvent* event)
     const qreal left = radius;
     const qreal right = width() - radius;
     const qreal center = left + (right - left) * m_knobPosition;
-    painter.setBrush(isEnabled() ? kKnob : QColor(0xF2, 0xF3, 0xF5));
+    painter.setBrush(isEnabled() ? knobColor()
+                                  : (ui::isDarkTheme() ? QColor(0x3A, 0x3D, 0x43)
+                                                       : QColor(0xF2, 0xF3, 0xF5)));
     painter.drawEllipse(QPointF(center, height() / 2.0), knobRadius, knobRadius);
 
     if (hasFocus()) {
-        QPen focusPen(QColor(0x1F, 0x6F, 0xEB, 90));
+        QColor focusColor = ui::themeColors().accent;
+        focusColor.setAlpha(90);
+        QPen focusPen(focusColor);
         focusPen.setWidth(2);
         painter.setPen(focusPen);
         painter.setBrush(Qt::NoBrush);

@@ -1,3 +1,4 @@
+#include "ui/Theme.h"
 #include "ui/ScrollingBar.h"
 
 #include <QHBoxLayout>
@@ -16,18 +17,9 @@ ScrollingBar::ScrollingBar(QWidget* parent)
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setWindowTitle(QStringLiteral("SnapOCR 滚动长截图"));
     setFixedSize(360, 92);
-    setStyleSheet(QStringLiteral(R"(
-        QWidget#scrollingBar { background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 12px; }
-        QLabel#scrollingHint { color: #2B2F36; font-size: 13px; }
-        QLabel#scrollingProgress { color: #7A818B; font-size: 12px; }
-        QPushButton {
-            background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 8px;
-            padding: 6px 14px; color: #2B2F36; font-size: 13px;
-        }
-        QPushButton:hover { border-color: #1F6FEB; color: #1F6FEB; }
-        QPushButton#finishButton { background: #1F6FEB; border-color: #1F6FEB; color: #FFFFFF; }
-        QPushButton#finishButton:hover { background: #1A5FD0; }
-    )"));
+    applyStyleSheet();
+    connect(&ui::ThemeNotifier::instance(), &ui::ThemeNotifier::themeChanged, this,
+            &ScrollingBar::applyStyleSheet);
     setObjectName(QStringLiteral("scrollingBar"));
 
     auto* layout = new QVBoxLayout(this);
@@ -75,6 +67,23 @@ void ScrollingBar::keyPressEvent(QKeyEvent* event)
         return;
     }
     QWidget::keyPressEvent(event);
+}
+
+
+void ScrollingBar::applyStyleSheet()
+{
+    setStyleSheet(ui::styled(QStringLiteral(R"(
+        QWidget#scrollingBar { background: {surface}; border: 1px solid {border}; border-radius: 12px; }
+        QLabel#scrollingHint { color: #2B2F36; font-size: 13px; }
+        QLabel#scrollingProgress { color: #7A818B; font-size: 12px; }
+        QPushButton {
+            background: {surface}; border: 1px solid {border}; border-radius: 8px;
+            padding: 6px 14px; color: #2B2F36; font-size: 13px;
+        }
+        QPushButton:hover { border-color: {accent}; color: {accent}; }
+        QPushButton#finishButton { background: {accent}; border-color: {accent}; color: {surface}; }
+        QPushButton#finishButton:hover { background: #1A5FD0; }
+    )")));
 }
 
 }  // namespace snapocr::ui

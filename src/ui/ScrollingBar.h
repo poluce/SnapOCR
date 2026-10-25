@@ -26,6 +26,7 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private:
+    void applyStyleSheet();
     QLabel* m_hint = nullptr;
     QLabel* m_progress = nullptr;
 };

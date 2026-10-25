@@ -30,6 +30,7 @@ signals:
     void retryRequested();
 
 private:
+    void applyStyleSheet();
     QPlainTextEdit* m_textEdit = nullptr;
     QLabel* m_infoLabel = nullptr;
     QPushButton* m_copyButton = nullptr;

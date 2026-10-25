@@ -1,3 +1,4 @@
+#include "ui/Theme.h"
 #include "ui/SettingsPanel.h"
 
 #include <QButtonGroup>
@@ -37,6 +38,8 @@ SettingsPanel::SettingsPanel(QWidget* parent)
 {
     buildUi();
     applyStyleSheet();
+    connect(&ui::ThemeNotifier::instance(), &ui::ThemeNotifier::themeChanged, this,
+            &SettingsPanel::applyStyleSheet);
 }
 
 void SettingsPanel::buildUi()
@@ -246,53 +249,53 @@ QWidget* SettingsPanel::makeToggleRow(const QString& label, ToggleSwitch* toggle
 
 void SettingsPanel::applyStyleSheet()
 {
-    setStyleSheet(QStringLiteral(R"(
-QFrame#rowSeparator { background: #EDEFF3; border: none; }
-QLabel#rowLabel { color: #1F2328; font-size: 13px; }
-QLabel#valueLabel { color: #525862; font-size: 13px; }
+    setStyleSheet(ui::styled(QStringLiteral(R"(
+QFrame#rowSeparator { background: {border}; border: none; }
+QLabel#rowLabel { color: {text}; font-size: 13px; }
+QLabel#valueLabel { color: {textMuted}; font-size: 13px; }
 
 QLineEdit, QComboBox, QKeySequenceEdit {
-    background: #FFFFFF; border: 1px solid #D8DCE3; border-radius: 7px;
-    padding: 4px 10px; min-height: 20px; color: #1F2328; font-size: 13px;
-    selection-background-color: #1F6FEB;
+    background: {surface}; border: 1px solid {border}; border-radius: 7px;
+    padding: 4px 10px; min-height: 20px; color: {text}; font-size: 13px;
+    selection-background-color: {accent};
 }
-QLineEdit:hover, QComboBox:hover, QKeySequenceEdit:hover { border-color: #C2C8D1; }
-QLineEdit:focus, QComboBox:focus, QKeySequenceEdit:focus { border-color: #1F6FEB; }
-QLineEdit:disabled, QComboBox:disabled { background: #F4F5F7; color: #9AA0A8; }
+QLineEdit:hover, QComboBox:hover, QKeySequenceEdit:hover { border-color: {borderStrong}; }
+QLineEdit:focus, QComboBox:focus, QKeySequenceEdit:focus { border-color: {accent}; }
+QLineEdit:disabled, QComboBox:disabled { background: {surfaceHover}; color: {textFaint}; }
 
 QComboBox::drop-down { border: none; width: 22px; }
 QComboBox QAbstractItemView {
-    background: #FFFFFF; border: 1px solid #D8DCE3; border-radius: 8px;
-    padding: 4px; outline: none; selection-background-color: #EAF1FD; selection-color: #1F2328;
+    background: {surface}; border: 1px solid {border}; border-radius: 8px;
+    padding: 4px; outline: none; selection-background-color: {accentSoft}; selection-color: {text};
 }
 
-QWidget#segmentBar { background: #EEEFF2; border-radius: 8px; }
+QWidget#segmentBar { background: {surfaceHover}; border-radius: 8px; }
 QToolButton#segmentButton {
     background: transparent; border: 1px solid transparent; border-radius: 6px;
-    padding: 5px 16px; color: #525862; font-size: 13px;
+    padding: 5px 16px; color: {textMuted}; font-size: 13px;
 }
-QToolButton#segmentButton:hover { color: #1F2328; }
+QToolButton#segmentButton:hover { color: {text}; }
 QToolButton#segmentButton:checked {
-    background: #FFFFFF; border-color: #D8DCE3; color: #1F2328; font-weight: 600;
+    background: {surface}; border-color: {border}; color: {text}; font-weight: 600;
 }
 
 QPushButton {
-    background: #FFFFFF; border: 1px solid #D8DCE3; border-radius: 8px;
-    padding: 7px 20px; color: #1F2328; font-size: 13px;
+    background: {surface}; border: 1px solid {border}; border-radius: 8px;
+    padding: 7px 20px; color: {text}; font-size: 13px;
 }
-QPushButton:hover { background: #F2F4F7; }
-QPushButton:pressed { background: #E9ECF1; }
+QPushButton:hover { background: {surfaceHover}; }
+QPushButton:pressed { background: {surfaceHover}; }
 
-QSlider::groove:horizontal { height: 4px; background: #E3E7ED; border-radius: 2px; }
-QSlider::sub-page:horizontal { background: #1F6FEB; border-radius: 2px; }
+QSlider::groove:horizontal { height: 4px; background: {border}; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: {accent}; border-radius: 2px; }
 QSlider::handle:horizontal {
     width: 16px; height: 16px; margin: -6px 0; border-radius: 8px;
-    background: #FFFFFF; border: 1px solid #C9CFD8;
+    background: {surface}; border: 1px solid {borderStrong};
 }
-QSlider::handle:horizontal:hover { border-color: #1F6FEB; }
-QSlider::handle:horizontal:disabled { background: #F0F2F5; border-color: #DFE3E9; }
-QSlider::sub-page:horizontal:disabled { background: #D8DCE3; }
-)"));
+QSlider::handle:horizontal:hover { border-color: {accent}; }
+QSlider::handle:horizontal:disabled { background: {surfaceHover}; border-color: {border}; }
+QSlider::sub-page:horizontal:disabled { background: {border}; }
+)")));
 }
 
 void SettingsPanel::setSettings(const common::AppSettings& settings)

@@ -28,6 +28,7 @@ signals:
     void saveRequested(const QImage& image);
 
 private:
+    void applyStyleSheet();
     history::HistoryEntry currentEntry() const;
     QImage currentImage() const;
     void updateButtons();

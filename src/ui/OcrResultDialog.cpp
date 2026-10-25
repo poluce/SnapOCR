@@ -1,3 +1,4 @@
+#include "ui/Theme.h"
 #include "ui/OcrResultDialog.h"
 
 #include <QApplication>
@@ -18,21 +19,9 @@ OcrResultDialog::OcrResultDialog(QWidget* parent)
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     resize(560, 420);
 
-    setStyleSheet(QStringLiteral(R"(
-        QDialog { background: #F7F8FA; }
-        QLabel { color: #5A616B; font-size: 12px; }
-        QPlainTextEdit {
-            background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 10px;
-            padding: 8px; color: #2B2F36; font-size: 13px; selection-background-color: #1F6FEB;
-        }
-        QCheckBox { color: #2B2F36; font-size: 12px; }
-        QPushButton {
-            background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 8px;
-            padding: 6px 14px; color: #2B2F36; font-size: 13px;
-        }
-        QPushButton:hover { border-color: #1F6FEB; color: #1F6FEB; }
-        QPushButton:pressed { background: #E8F0FE; }
-    )"));
+    applyStyleSheet();
+    connect(&ui::ThemeNotifier::instance(), &ui::ThemeNotifier::themeChanged, this,
+            &OcrResultDialog::applyStyleSheet);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 12, 12, 12);
@@ -127,6 +116,26 @@ void OcrResultDialog::setBusy(const QString& message)
 QString OcrResultDialog::text() const
 {
     return m_textEdit->toPlainText();
+}
+
+
+void OcrResultDialog::applyStyleSheet()
+{
+    setStyleSheet(ui::styled(QStringLiteral(R"(
+        QDialog { background: {window}; }
+        QLabel { color: #5A616B; font-size: 12px; }
+        QPlainTextEdit {
+            background: {surface}; border: 1px solid {border}; border-radius: 10px;
+            padding: 8px; color: #2B2F36; font-size: 13px; selection-background-color: {accent};
+        }
+        QCheckBox { color: #2B2F36; font-size: 12px; }
+        QPushButton {
+            background: {surface}; border: 1px solid {border}; border-radius: 8px;
+            padding: 6px 14px; color: #2B2F36; font-size: 13px;
+        }
+        QPushButton:hover { border-color: {accent}; color: {accent}; }
+        QPushButton:pressed { background: {accentSoft}; }
+    )")));
 }
 
 }  // namespace snapocr::ui

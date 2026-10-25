@@ -1,3 +1,4 @@
+#include "ui/Theme.h"
 #include "ui/MainWindow.h"
 
 #include <QCloseEvent>
@@ -37,6 +38,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     buildUi();
     applyStyleSheet();
+    connect(&ui::ThemeNotifier::instance(), &ui::ThemeNotifier::themeChanged, this,
+            &MainWindow::applyStyleSheet);
     setHotkeyTexts(QStringLiteral("F1"), QStringLiteral("F4"));
 }
 
@@ -181,39 +184,39 @@ QPushButton* MainWindow::makeActionCard(const QString& iconAction, const QString
 
 void MainWindow::applyStyleSheet()
 {
-    setStyleSheet(QStringLiteral(R"(
+    setStyleSheet(ui::styled(QStringLiteral(R"(
 QWidget#windowSurface {
-    background: #F7F8FA; border: 1px solid #E1E5EB; border-radius: 12px;
+    background: {window}; border: 1px solid {border}; border-radius: 12px;
 }
-QWidget#titleBar { background: #FFFFFF; border-top-left-radius: 12px; border-top-right-radius: 12px; }
-QLabel#titleBarText { color: #1F2328; font-size: 13px; font-weight: 600; }
+QWidget#titleBar { background: {surface}; border-top-left-radius: 12px; border-top-right-radius: 12px; }
+QLabel#titleBarText { color: {text}; font-size: 13px; font-weight: 600; }
 QToolButton#titleBarButton {
-    border: none; border-radius: 6px; color: #5B6270; font-size: 15px;
+    border: none; border-radius: 6px; color: {textMuted}; font-size: 15px;
 }
-QToolButton#titleBarButton:hover { background: #EDF0F4; }
+QToolButton#titleBarButton:hover { background: {surfaceHover}; }
 QToolButton#titleBarClose {
-    border: none; border-radius: 6px; color: #5B6270; font-size: 14px;
+    border: none; border-radius: 6px; color: {textMuted}; font-size: 14px;
 }
-QToolButton#titleBarClose:hover { background: #E8464A; color: #FFFFFF; }
+QToolButton#titleBarClose:hover { background: {danger}; color: {surface}; }
 
 QScrollArea#contentScroll { background: transparent; border: none; }
 QWidget#contentArea { background: transparent; }
 QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
-QScrollBar::handle:vertical { background: #D2D7DF; border-radius: 5px; min-height: 30px; }
-QScrollBar::handle:vertical:hover { background: #BFC6D0; }
+QScrollBar::handle:vertical { background: {scrollbar}; border-radius: 5px; min-height: 30px; }
+QScrollBar::handle:vertical:hover { background: {borderStrong}; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 
 QPushButton#actionCard {
-    background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 10px; text-align: left;
+    background: {surface}; border: 1px solid {border}; border-radius: 10px; text-align: left;
 }
-QPushButton#actionCard:hover { border-color: #C7D6F5; background: #FBFCFF; }
-QPushButton#actionCard:pressed { background: #F3F7FE; }
-QLabel#actionTitle { color: #12161B; font-size: 14px; font-weight: 600; }
-QLabel#hotkeyBadge { color: #9AA0A8; font-size: 12px; }
-QLabel#statusLabel { color: #A0A6AE; font-size: 11px; }
-QLabel#versionLabel { color: #B4B9C0; font-size: 11px; }
-)"));
+QPushButton#actionCard:hover { border-color: {borderStrong}; background: {surfaceHover}; }
+QPushButton#actionCard:pressed { background: {surfaceHover}; }
+QLabel#actionTitle { color: {text}; font-size: 14px; font-weight: 600; }
+QLabel#hotkeyBadge { color: {textFaint}; font-size: 12px; }
+QLabel#statusLabel { color: {textFaint}; font-size: 11px; }
+QLabel#versionLabel { color: {textFaint}; font-size: 11px; }
+)")));
 }
 
 void MainWindow::setHotkeyTexts(const QString& captureText, const QString& ocrText)

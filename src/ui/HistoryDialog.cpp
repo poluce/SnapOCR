@@ -28,29 +28,9 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
     resize(760, 520);
 
     // 与主窗口/设置面板一致的浅色风格
-    setStyleSheet(QStringLiteral(R"(
-        QDialog { background: #F7F8FA; }
-        QLabel#historyHeader { color: #5A616B; font-size: 12px; }
-        QLabel#historyEmptyHint { color: #8A9099; font-size: 13px; padding: 24px; }
-        QLabel#historyStatus { color: #1F6FEB; font-size: 12px; }
-        QListWidget#historyList {
-            background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 10px; padding: 8px;
-            outline: none;
-        }
-        QListWidget#historyList::item {
-            color: #2B2F36; border-radius: 8px; padding: 6px;
-        }
-        QListWidget#historyList::item:selected {
-            background: #E8F0FE; color: #1F6FEB;
-        }
-        QPushButton {
-            background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 8px;
-            padding: 6px 14px; color: #2B2F36; font-size: 13px;
-        }
-        QPushButton:hover { border-color: #1F6FEB; color: #1F6FEB; }
-        QPushButton:pressed { background: #E8F0FE; }
-        QPushButton:disabled { color: #B6BBC2; border-color: #EDEFF2; }
-    )"));
+    applyStyleSheet();
+    connect(&ui::ThemeNotifier::instance(), &ui::ThemeNotifier::themeChanged, this,
+            &HistoryDialog::applyStyleSheet);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(16, 14, 16, 12);
@@ -206,6 +186,34 @@ void HistoryDialog::updateButtons()
     if (hasSelection && m_status->text().isEmpty()) {
         m_status->clear();
     }
+}
+
+
+void HistoryDialog::applyStyleSheet()
+{
+    setStyleSheet(ui::styled(QStringLiteral(R"(
+        QDialog { background: {window}; }
+        QLabel#historyHeader { color: #5A616B; font-size: 12px; }
+        QLabel#historyEmptyHint { color: {textFaint}; font-size: 13px; padding: 24px; }
+        QLabel#historyStatus { color: {accent}; font-size: 12px; }
+        QListWidget#historyList {
+            background: {surface}; border: 1px solid {border}; border-radius: 10px; padding: 8px;
+            outline: none;
+        }
+        QListWidget#historyList::item {
+            color: #2B2F36; border-radius: 8px; padding: 6px;
+        }
+        QListWidget#historyList::item:selected {
+            background: {accentSoft}; color: {accent};
+        }
+        QPushButton {
+            background: {surface}; border: 1px solid {border}; border-radius: 8px;
+            padding: 6px 14px; color: #2B2F36; font-size: 13px;
+        }
+        QPushButton:hover { border-color: {accent}; color: {accent}; }
+        QPushButton:pressed { background: {accentSoft}; }
+        QPushButton:disabled { color: {textFaint}; border-color: {border}; }
+    )")));
 }
 
 }  // namespace snapocr::ui
