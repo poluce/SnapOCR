@@ -180,6 +180,20 @@ void PinWindow::wheelEvent(QWheelEvent* event)
     event->accept();
 }
 
+void PinWindow::requestOcr()
+{
+    if (!m_image.isNull()) {
+        emit ocrRequested(m_image);
+    }
+}
+
+void PinWindow::requestEdit()
+{
+    if (!m_image.isNull()) {
+        emit editRequested(m_image);
+    }
+}
+
 void PinWindow::keyPressEvent(QKeyEvent* event)
 {
     switch (event->key()) {
@@ -189,6 +203,18 @@ void PinWindow::keyPressEvent(QKeyEvent* event)
     case Qt::Key_R:
         rotateBy90();
         return;
+    case Qt::Key_T:
+        if (event->modifiers().testFlag(Qt::ControlModifier)) {
+            requestOcr();
+            return;
+        }
+        break;
+    case Qt::Key_E:
+        if (event->modifiers().testFlag(Qt::ControlModifier)) {
+            requestEdit();
+            return;
+        }
+        break;
     case Qt::Key_C:
         if (event->modifiers().testFlag(Qt::ControlModifier)) {
             emit copyRequested(m_image);
@@ -210,6 +236,9 @@ void PinWindow::keyPressEvent(QKeyEvent* event)
 void PinWindow::contextMenuEvent(QContextMenuEvent* event)
 {
     QMenu menu(this);
+    QAction* ocrAction = menu.addAction(QStringLiteral("提取文字 (Ctrl+T)"));
+    QAction* editAction = menu.addAction(QStringLiteral("在编辑器中打开 (Ctrl+E)"));
+    menu.addSeparator();
     QAction* copyAction = menu.addAction(QStringLiteral("复制到剪贴板 (Ctrl+C)"));
     QAction* saveAction = menu.addAction(QStringLiteral("保存 (Ctrl+S)"));
     menu.addSeparator();
@@ -224,7 +253,11 @@ void PinWindow::contextMenuEvent(QContextMenuEvent* event)
     if (chosen == nullptr) {
         return;
     }
-    if (chosen == copyAction) {
+    if (chosen == ocrAction) {
+        requestOcr();
+    } else if (chosen == editAction) {
+        requestEdit();
+    } else if (chosen == copyAction) {
         emit copyRequested(m_image);
     } else if (chosen == saveAction) {
         emit saveRequested(m_image);

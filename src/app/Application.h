@@ -21,6 +21,15 @@ class PinWindow;
 class OcrResultDialog;
 }
 
+
+namespace snapocr::annotate {
+class AnnotationDocument;
+}
+
+namespace snapocr::editor {
+class EditorWindow;
+}
+
 namespace snapocr::overlay {
 class OverlayController;
 }
@@ -81,6 +90,8 @@ private:
     void startOcrCapture();
     void onCopyRequested(const QImage& image);
     void pinImage(const QImage& image);
+    // F-ANN-19：把任意图片放进标注编辑器（贴图「在编辑器中打开」用）
+    void openEditorForImage(const QImage& image);
     void showHistory();
     // 托盘「贴图最近一张」：取历史里最新一张贴到屏幕
     void pinLatestFromHistory();
@@ -120,6 +131,8 @@ private:
     QVector<QPointer<ui::PinWindow>> m_pins;
     history::HistoryStore* m_history = nullptr;
     QPointer<ui::HistoryDialog> m_historyDialog;
+    QPointer<editor::EditorWindow> m_pinEditor;
+    std::unique_ptr<annotate::AnnotationDocument> m_pinEditorDocument;
     capture::ScrollingCaptureController* m_scrolling = nullptr;
     QRect m_scrollingRegion;  // 本次长截图的物理区域
     QPointer<ui::ScrollingBar> m_scrollingBar;

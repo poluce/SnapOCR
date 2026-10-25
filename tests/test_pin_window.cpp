@@ -1,6 +1,7 @@
 #include <QtTest>
 
 #include <QImage>
+#include <QSignalSpy>
 #include <QWheelEvent>
 
 #include "ui/PinWindow.h"
@@ -17,6 +18,8 @@ private slots:
     void zoomScalesWindowAndClamps();
     void rotateSwapsDimensions();
     void imageIsKeptIntact();
+    void requestOcrEmitsImage();
+    void requestEditEmitsImage();
 
 private:
     static QImage makeImage();
@@ -72,6 +75,26 @@ void PinWindowTest::imageIsKeptIntact()
     PinWindow pin(source);
     QCOMPARE(pin.image().size(), source.size());
     QCOMPARE(pin.image().pixelColor(10, 10), source.pixelColor(10, 10));
+}
+
+void PinWindowTest::requestOcrEmitsImage()
+{
+    const QImage source = makeImage();
+    PinWindow pin(source);
+    QSignalSpy spy(&pin, &PinWindow::ocrRequested);
+    pin.requestOcr();
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.takeFirst().first().value<QImage>().size(), source.size());
+}
+
+void PinWindowTest::requestEditEmitsImage()
+{
+    const QImage source = makeImage();
+    PinWindow pin(source);
+    QSignalSpy spy(&pin, &PinWindow::editRequested);
+    pin.requestEdit();
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.takeFirst().first().value<QImage>().size(), source.size());
 }
 
 QTEST_MAIN(PinWindowTest)

@@ -27,9 +27,16 @@ public:
     qreal zoom() const { return m_zoom; }
     void setZoom(qreal zoom);
 
+    // 菜单与快捷键共用（也便于单测直接触发）
+    void requestOcr();
+    void requestEdit();
+
 signals:
     void copyRequested(const QImage& image);
     void saveRequested(const QImage& image);
+    // F-ANN-19：贴图可再取字 / 再标注
+    void ocrRequested(const QImage& image);
+    void editRequested(const QImage& image);
     void closed();
 
 protected:

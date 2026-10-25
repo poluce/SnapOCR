@@ -42,6 +42,8 @@
 #include "platform/win32/WindowActivation.h"
 #include "snapocr/Version.h"
 #include "history/HistoryStore.h"
+#include "editor/AnnotationCanvas.h"
+#include "editor/EditorWindow.h"
 #include "i18n/Translator.h"
 #include "ui/HistoryDialog.h"
 #include "ui/MainWindow.h"
@@ -650,6 +652,78 @@ void Application::cancelScrollingCapture()
     showInfo(QStringLiteral("已取消长截图"));
 }
 
+void Application::openEditorForImage(const QImage& image)
+{
+    if (image.isNull()) {
+        return;
+    }
+    if (m_pinEditor != nullptr) {
+        m_pinEditor->close();
+        m_pinEditor = nullptr;
+    }
+
+    m_pinEditorDocument = std::make_unique<annotate::AnnotationDocument>();
+    m_pinEditorDocument->setBaseImage(image);
+
+    auto* editor = new editor::EditorWindow;
+    editor->setAttribute(Qt::WA_DeleteOnClose);
+    connect(editor, &QObject::destroyed, this, [this]() {
+        m_pinEditor = nullptr;
+        m_pinEditorDocument.reset();
+    });
+    editor->setDocument(m_pinEditorDocument.get());
+
+    annotate::AnnotationStyle style;
+    style.color = m_settings.lastColor;
+    style.width = qMax(1, m_settings.lastWidth);
+    style.fontSize = qMax(6, m_settings.lastFontSize);
+    editor->setStyle(style);
+    editor->setTool(annotate::AnnotationKind::Rectangle);
+
+    connect(editor, &editor::EditorWindow::confirmRequested, this, [this, editor]() {
+        onCopyRequested(editor->render());
+        editor->close();
+    });
+    connect(editor, &editor::EditorWindow::saveRequested, this, [this, editor]() {
+        onSaveRequested(editor->render());
+    });
+    connect(editor, &editor::EditorWindow::cancelRequested, this, [editor]() {
+        editor->close();
+    });
+
+    // 定位：以光标为中心、按屏幕 DPR 换算逻辑尺寸，夹取到屏幕内
+    const qreal dpr = QGuiApplication::primaryScreen() != nullptr
+                          ? QGuiApplication::primaryScreen()->devicePixelRatio()
+                          : 1.0;
+    const QSize logicalSize(qRound(image.width() / dpr), qRound(image.height() / dpr));
+    const QRect screen = screenLogicalFor(QRect(QCursor::pos(), QSize(1, 1)));
+    QRect geometry(QPoint(0, 0), logicalSize);
+    geometry.moveCenter(QCursor::pos());
+    if (geometry.left() < screen.left()) {
+        geometry.moveLeft(screen.left());
+    }
+    if (geometry.top() < screen.top()) {
+        geometry.moveTop(screen.top());
+    }
+    if (geometry.right() > screen.right()) {
+        geometry.moveRight(screen.right());
+    }
+    if (geometry.bottom() > screen.bottom()) {
+        geometry.moveBottom(screen.bottom());
+    }
+    editor->placeAt(geometry);
+    editor->show();
+    platform::win32::forceForegroundWindow(editor);
+    if (editor->canvas() != nullptr) {
+        editor->canvas()->setFocus();
+    }
+
+    m_pinEditor = editor;
+    if (m_mainWindow != nullptr) {
+        m_mainWindow->setStatusText(QStringLiteral("贴图再标注：Enter 复制，Ctrl+S 保存，Esc 关闭"));
+    }
+}
+
 void Application::pinLatestFromHistory()
 {
     if (m_history == nullptr) {
@@ -704,6 +778,16 @@ void Application::pinImage(const QImage& image)
     });
     connect(pin, &ui::PinWindow::saveRequested, this, [this](const QImage& img) {
         onSaveRequested(img);
+    });
+    // F-ANN-19：贴图可再取字 / 再标注
+    connect(pin, &ui::PinWindow::ocrRequested, this, [this](const QImage& img) {
+        if (m_mainWindow != nullptr) {
+            m_mainWindow->setStatusText(QStringLiteral("贴图取字：识别中…"));
+        }
+        runOcr(img);
+    });
+    connect(pin, &ui::PinWindow::editRequested, this, [this](const QImage& img) {
+        openEditorForImage(img);
     });
     connect(pin, &QObject::destroyed, this, [this, pin]() {
         // 析构期间不要再用 QPointer(pin) 构造（对象已处于销毁中），按裸指针过滤
