@@ -152,4 +152,89 @@ bool ScreenCapture::captureAll(capture::CaptureResult* result, QString* errorMes
     return true;
 }
 
+
+bool ScreenCapture::captureRegion(const QRect& physicalRect, QImage* image,
+                                  QString* errorMessage)
+{
+    if (image == nullptr) {
+        return false;
+    }
+    if (physicalRect.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("截图区域为空");
+        }
+        return false;
+    }
+
+    // 裁剪到虚拟桌面，保证 BitBlt 源坐标合法
+    const QRect virtualRect(::GetSystemMetrics(SM_XVIRTUALSCREEN), ::GetSystemMetrics(SM_YVIRTUALSCREEN),
+                            ::GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                            ::GetSystemMetrics(SM_CYVIRTUALSCREEN));
+    const QRect region = virtualRect.isEmpty() ? physicalRect : physicalRect.intersected(virtualRect);
+    if (region.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("截图区域不在屏幕内");
+        }
+        return false;
+    }
+
+    HDC screenDc = ::GetDC(nullptr);
+    if (screenDc == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("获取屏幕 DC 失败");
+        }
+        return false;
+    }
+    HDC memoryDc = ::CreateCompatibleDC(screenDc);
+    if (memoryDc == nullptr) {
+        ::ReleaseDC(nullptr, screenDc);
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("创建兼容 DC 失败");
+        }
+        return false;
+    }
+
+    BITMAPINFO bitmapInfo{};
+    bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bitmapInfo.bmiHeader.biWidth = region.width();
+    bitmapInfo.bmiHeader.biHeight = -region.height();
+    bitmapInfo.bmiHeader.biPlanes = 1;
+    bitmapInfo.bmiHeader.biBitCount = 32;
+    bitmapInfo.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP bitmap = ::CreateDIBSection(memoryDc, &bitmapInfo, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (bitmap == nullptr || bits == nullptr) {
+        if (bitmap != nullptr) {
+            ::DeleteObject(bitmap);
+        }
+        ::DeleteDC(memoryDc);
+        ::ReleaseDC(nullptr, screenDc);
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("创建 DIB 失败");
+        }
+        return false;
+    }
+
+    const HGDIOBJ previous = ::SelectObject(memoryDc, bitmap);
+    const BOOL copied = ::BitBlt(memoryDc, 0, 0, region.width(), region.height(), screenDc,
+                                 region.x(), region.y(), SRCCOPY | CAPTUREBLT);
+    ::SelectObject(memoryDc, previous);
+
+    bool ok = false;
+    if (copied != FALSE) {
+        const QImage view(static_cast<const uchar*>(bits), region.width(), region.height(),
+                          region.width() * 4, QImage::Format_RGB32);
+        *image = view.copy();
+        ok = !image->isNull();
+    } else if (errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("BitBlt 失败");
+    }
+
+    ::DeleteObject(bitmap);
+    ::DeleteDC(memoryDc);
+    ::ReleaseDC(nullptr, screenDc);
+    return ok;
+}
+
 }  // namespace snapocr::platform::win32

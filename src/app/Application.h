@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QImage>
+#include <QRect>
 #include <QObject>
 #include <QPointer>
 #include <QSize>
@@ -26,6 +27,14 @@ class OverlayController;
 
 namespace snapocr::ocr {
 class OcrService;
+}
+
+namespace snapocr::capture {
+class ScrollingCaptureController;
+}
+
+namespace snapocr::ui {
+class ScrollingBar;
 }
 
 namespace snapocr::history {
@@ -72,6 +81,10 @@ private:
     void onCopyRequested(const QImage& image);
     void pinImage(const QImage& image);
     void showHistory();
+    // 滚动长截图（F-CAP-16）
+    void startScrollingCapture(const QRect& physicalRect);
+    void finishScrollingCapture();
+    void cancelScrollingCapture();
     void recordHistory(const QImage& image);
     void onSaveRequested(const QImage& image);
     void onCaptureError(const QString& message);
@@ -104,6 +117,9 @@ private:
     QVector<QPointer<ui::PinWindow>> m_pins;
     history::HistoryStore* m_history = nullptr;
     QPointer<ui::HistoryDialog> m_historyDialog;
+    capture::ScrollingCaptureController* m_scrolling = nullptr;
+    QRect m_scrollingRegion;  // 本次长截图的物理区域
+    QPointer<ui::ScrollingBar> m_scrollingBar;
     QImage m_lastOcrImage;
     QSize m_lastOcrSelectionSize;
     bool m_lastOcrTouchesEdge = false;

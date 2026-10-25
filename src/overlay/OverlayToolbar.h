@@ -46,6 +46,7 @@ signals:
     void widthChangeRequested(int width);
     void fillToggled(bool filled);
     void dashToggled(bool dashed);
+    void scrollingRequested();
 
 protected:
     bool event(QEvent* event) override;

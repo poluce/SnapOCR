@@ -232,6 +232,8 @@ void OverlayController::showToolbar()
         });
         connect(m_toolbar, &OverlayToolbar::copyRequested, this, &OverlayController::requestCopy);
         connect(m_toolbar, &OverlayToolbar::pinRequested, this, &OverlayController::requestPin);
+        connect(m_toolbar, &OverlayToolbar::scrollingRequested, this,
+                &OverlayController::requestScrolling);
         connect(m_toolbar, &OverlayToolbar::saveRequested, this, &OverlayController::requestSave);
         connect(m_toolbar, &OverlayToolbar::ocrRequested, this, &OverlayController::requestOcr);
         connect(m_toolbar, &OverlayToolbar::cancelRequested, this, &OverlayController::cancel);
@@ -526,6 +528,17 @@ bool OverlayController::lastSelectionTouchesScreenEdge() const
     }
     // 选区与虚拟桌面都用逻辑坐标，直接比较边界即可
     return ocr::selectionTouchesScreenEdge(selection, m_virtualLogicalDesktop);
+}
+
+void OverlayController::requestScrolling()
+{
+    finishPendingTextInput();
+    const QRect selection = m_selection.rect();
+    if (selection.isEmpty()) {
+        return;
+    }
+    emit scrollingRequested(selection);
+    finish();
 }
 
 void OverlayController::requestPin()

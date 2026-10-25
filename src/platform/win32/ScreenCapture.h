@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QImage>
 #include <QString>
 
 #include "capture/CaptureTypes.h"
@@ -11,6 +12,9 @@ class ScreenCapture
 {
 public:
     static bool captureAll(capture::CaptureResult* result, QString* errorMessage);
+
+    // 抓取虚拟桌面物理像素矩形（滚动长截图用）。矩形会被裁剪到屏幕内。
+    static bool captureRegion(const QRect& physicalRect, QImage* image, QString* errorMessage);
 };
 
 }  // namespace snapocr::platform::win32

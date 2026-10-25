@@ -41,10 +41,35 @@
 #include "ui/HistoryDialog.h"
 #include "ui/MainWindow.h"
 #include "ui/OcrResultDialog.h"
+#include "capture/ScrollingCaptureController.h"
+#include "platform/win32/ScreenCapture.h"
 #include "ui/PinWindow.h"
+#include "ui/ScrollingBar.h"
 #include "ui/Theme.h"
 
 namespace snapocr::app {
+
+namespace {
+
+// 把虚拟桌面物理坐标换算成 Qt 逻辑坐标（多屏不同 DPR 时逐屏匹配）。
+QPoint physicalToLogicalPoint(const QPoint& physical)
+{
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        const QRect logical = screen->geometry();
+        const qreal dpr = screen->devicePixelRatio();
+        const QRect physicalGeometry(
+            QPoint(qRound(logical.x() * dpr), qRound(logical.y() * dpr)),
+            QSize(qRound(logical.width() * dpr), qRound(logical.height() * dpr)));
+        if (physicalGeometry.contains(physical)) {
+            return QPoint(logical.x() + qRound((physical.x() - physicalGeometry.x()) / dpr),
+                          logical.y() + qRound((physical.y() - physicalGeometry.y()) / dpr));
+        }
+    }
+    return physical;
+}
+
+}  // namespace
+
 namespace {
 
 constexpr auto kFlagHelp = "--help";
@@ -166,6 +191,8 @@ bool Application::initializeServices()
             &Application::onCopyRequested);
     connect(m_overlayController, &overlay::OverlayController::pinRequested, this,
             &Application::pinImage);
+    connect(m_overlayController, &overlay::OverlayController::scrollingRequested, this,
+            &Application::startScrollingCapture);
     connect(m_overlayController, &overlay::OverlayController::saveRequested, this,
             &Application::onSaveRequested);
     connect(m_overlayController, &overlay::OverlayController::ocrRequested, this,
@@ -299,6 +326,16 @@ void Application::updateHotkeyLabels()
 // 3) 否则才当作“取消/确认截图”。
 void Application::forwardOverlayKey(int key)
 {
+    // 滚动长截图期间：Esc 取消、Enter 完成
+    if (m_scrolling != nullptr && m_scrolling->isActive()) {
+        if (key == Qt::Key_Escape) {
+            cancelScrollingCapture();
+        } else {
+            finishScrollingCapture();
+        }
+        return;
+    }
+
     auto sendTo = [key](QWidget* target) {
         if (target == nullptr) {
             return;
@@ -443,6 +480,101 @@ void Application::recordHistory(const QImage& image)
     if (m_historyDialog != nullptr) {
         m_historyDialog->refresh();
     }
+}
+
+void Application::startScrollingCapture(const QRect& physicalRect)
+{
+    if (physicalRect.isEmpty()) {
+        return;
+    }
+    if (m_scrolling == nullptr) {
+        m_scrolling = new capture::ScrollingCaptureController(this);
+        m_scrolling->setFrameProvider([this](QImage* image, QString* error) {
+            return platform::win32::ScreenCapture::captureRegion(m_scrollingRegion, image, error);
+        });
+    }
+    // 记录区域：provider 是静态 lambda，用成员变量传递当前区域
+    m_scrollingRegion = physicalRect;
+
+    if (m_scrollingBar == nullptr) {
+        auto* bar = new ui::ScrollingBar();
+        bar->setAttribute(Qt::WA_DeleteOnClose);
+        connect(bar, &ui::ScrollingBar::finishRequested, this,
+                &Application::finishScrollingCapture);
+        connect(bar, &ui::ScrollingBar::cancelRequested, this,
+                &Application::cancelScrollingCapture);
+        connect(bar, &QObject::destroyed, this, [this]() { m_scrollingBar = nullptr; });
+        m_scrollingBar = bar;
+    }
+
+    connect(m_scrolling, &capture::ScrollingCaptureController::progress, m_scrollingBar.data(),
+            [this](int frames, int height) {
+                if (m_scrollingBar != nullptr) {
+                    m_scrollingBar->setProgress(frames, height);
+                }
+            },
+            Qt::UniqueConnection);
+    connect(m_scrolling, &capture::ScrollingCaptureController::finished, this,
+            [this](const QImage& image) {
+                if (m_scrollingBar != nullptr) {
+                    m_scrollingBar->close();
+                }
+                registerOverlayHotkeys(false);
+                recordHistory(image);
+                QString error;
+                if (platform::win32::copyImageToClipboard(image, &error)) {
+                    showInfo(QStringLiteral("长截图完成（%1 × %2），已复制到剪贴板")
+                                 .arg(image.width())
+                                 .arg(image.height()));
+                } else {
+                    showInfo(QStringLiteral("长截图完成（%1 × %2），但复制失败：%3")
+                                 .arg(image.width())
+                                 .arg(image.height())
+                                 .arg(error));
+                }
+            },
+            Qt::UniqueConnection);
+    connect(m_scrolling, &capture::ScrollingCaptureController::failed, this,
+            [this](const QString& message) {
+                if (m_scrollingBar != nullptr) {
+                    m_scrollingBar->close();
+                }
+                registerOverlayHotkeys(false);
+                showError(QStringLiteral("长截图失败：%1").arg(message));
+            },
+            Qt::UniqueConnection);
+
+    // 期间用 Esc/Enter 控制：复用覆盖层的全局热键（窗口没有焦点也能用）
+    registerOverlayHotkeys(true);
+
+    m_scrolling->start(physicalRect);
+    if (m_scrollingBar != nullptr) {
+        // 放在选区左下角附近，避免遮挡滚动内容
+        const QPoint physicalAnchor =
+            m_scrollingRegion.topLeft() + QPoint(0, m_scrollingRegion.height());
+        m_scrollingBar->move(physicalToLogicalPoint(physicalAnchor) + QPoint(0, 12));
+        m_scrollingBar->show();
+        m_scrollingBar->raise();
+    }
+}
+
+void Application::finishScrollingCapture()
+{
+    if (m_scrolling != nullptr && m_scrolling->isActive()) {
+        m_scrolling->finish();
+    }
+}
+
+void Application::cancelScrollingCapture()
+{
+    if (m_scrolling != nullptr && m_scrolling->isActive()) {
+        m_scrolling->cancel();
+    }
+    if (m_scrollingBar != nullptr) {
+        m_scrollingBar->close();
+    }
+    registerOverlayHotkeys(false);
+    showInfo(QStringLiteral("已取消长截图"));
 }
 
 void Application::showHistory()
@@ -819,6 +951,26 @@ int Application::runCaptureSelfTest()
     }
     out << "  virtual : " << captured.virtualGeometry.width() << 'x'
         << captured.virtualGeometry.height() << '\n';
+
+    // 区域捕获（滚动长截图用）：从第一块屏中间抓一块，校验尺寸
+    {
+        const QRect firstGeometry = captured.screens.first().monitor.physicalGeometry;
+        const QRect region(firstGeometry.center() - QPoint(60, 40), QSize(120, 80));
+        QImage regionImage;
+        QString regionError;
+        if (platform::win32::ScreenCapture::captureRegion(region, &regionImage, &regionError)) {
+            out << "  region  : " << regionImage.width() << 'x' << regionImage.height() << '\n';
+            if (regionImage.width() != region.width() || regionImage.height() != region.height()) {
+                out << "FAIL: 区域捕获尺寸不符\n";
+                out.flush();
+                return EXIT_FAILURE;
+            }
+        } else {
+            out << "FAIL: 区域捕获失败：" << regionError << '\n';
+            out.flush();
+            return EXIT_FAILURE;
+        }
+    }
     out << "PASS\n";
     out.flush();
     return EXIT_SUCCESS;

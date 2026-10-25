@@ -81,8 +81,9 @@ void OverlayToolbarTest::hasAllActionButtons()
     OverlayToolbar toolbar;
     const auto buttons = toolbar.findChildren<QToolButton*>();
     // 1 选择 + 10 工具（含模糊笔刷）+ 2 撤销重做 + 4 颜色/线宽/填充/虚线
-    // + 5 动作（取字/保存/贴图/取消/复制）= 22
-    QCOMPARE(buttons.size(), 22);
+    // + 6 动作（取字/保存/长截图/贴图/取消/复制）= 23
+    QCOMPARE(buttons.size(), 23);
+    QVERIFY(toolbar.findChild<QToolButton*>(QStringLiteral("scrollingButton")) != nullptr);
     QVERIFY(toolbar.findChild<QToolButton*>(QStringLiteral("fillButton")) != nullptr);
     QVERIFY(toolbar.findChild<QToolButton*>(QStringLiteral("dashButton")) != nullptr);
     QVERIFY(toolbar.findChild<QToolButton*>(QStringLiteral("pinButton")) != nullptr);

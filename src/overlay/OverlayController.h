@@ -55,6 +55,7 @@ signals:
     void started();
     void copyRequested(const QImage& image);
     void pinRequested(const QImage& image);
+    void scrollingRequested(const QRect& physicalRect);
     void colorPicked(const QString& hex);
     void saveRequested(const QImage& image);
     void ocrRequested(const QImage& image);
@@ -83,6 +84,7 @@ private:
 
     void requestCopy();
     void requestPin();
+    void requestScrolling();
     // 选区是否贴到虚拟桌面边缘（OCR 裁边提示用，见 F-OCR-09）
 
     void updateMagnifierFromCursor();

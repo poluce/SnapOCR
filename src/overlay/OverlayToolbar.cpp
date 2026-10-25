@@ -184,6 +184,9 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     auto* saveButton = makeButton(ui::actionIcon(QStringLiteral("save"), kToolbarInk), QStringLiteral("保存 Ctrl+S"));
     auto* copyButton = makeButton(ui::actionIcon(QStringLiteral("confirm"), kToolbarInk), QStringLiteral("复制到剪贴板 Enter"));
     copyButton->setObjectName(QStringLiteral("copyButton"));
+    auto* scrollingButton = makeButton(ui::actionIcon(QStringLiteral("history"), kToolbarInk),
+                                       QStringLiteral("滚动长截图：滚动页面自动拼接"));
+    scrollingButton->setObjectName(QStringLiteral("scrollingButton"));
     auto* pinButton = makeButton(ui::actionIcon(QStringLiteral("pin"), kToolbarInk),
                                  QStringLiteral("贴图到屏幕（置顶显示）"));
     pinButton->setObjectName(QStringLiteral("pinButton"));
@@ -193,6 +196,7 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     connect(saveButton, &QToolButton::clicked, this, [this]() { emit saveRequested(); });
     connect(copyButton, &QToolButton::clicked, this, [this]() { emit copyRequested(); });
     connect(pinButton, &QToolButton::clicked, this, [this]() { emit pinRequested(); });
+    connect(scrollingButton, &QToolButton::clicked, this, [this]() { emit scrollingRequested(); });
     connect(cancelButton, &QToolButton::clicked, this, [this]() { emit cancelRequested(); });
 
     // 单行排列：工具 | 撤销重做 | 颜色线宽 | 动作
@@ -203,6 +207,7 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     rootLayout->addWidget(makeSeparator());
     rootLayout->addWidget(ocrButton);
     rootLayout->addWidget(saveButton);
+    rootLayout->addWidget(scrollingButton);
     rootLayout->addWidget(pinButton);
     rootLayout->addWidget(cancelButton);
     rootLayout->addWidget(copyButton);  // 勾号固定在最右侧
