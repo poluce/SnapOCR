@@ -5,9 +5,10 @@
 ## 项目是什么
 
 **SnapOCR**：Windows 10/11 上的轻量截图 + 标注 + OCR 工具（C++20 / Qt 6.11 Widgets / MSVC / CMake + Ninja）。
-当前阶段：**阶段二已完成并发布**（v0.1.0），**阶段三进行中**（最新补丁版 v0.1.2：
-主题一致性、稳定性审计、发布工程、i18n 119 条、拖拽导出、贴图取字/再标注）；
-剩余为需要外部环境的验证项；状态以 [完成情况](docs/04-完成情况.md) 为准。
+当前阶段：**阶段二已完成并发布**（v0.1.0），**阶段三进行中**（已发布 v1.0.0-rc.1 候选版：
+主题一致性、稳定性审计、发布工程（含 Inno Setup 安装包）、性能验收、i18n 119 条、
+拖拽导出、贴图取字/再标注）；剩余为需要外部环境的验证项（手测矩阵通过后转正 v1.0.0）；
+状态以 [完成情况](docs/04-完成情况.md) 为准。
 
 - 文档索引与维护规则：`docs/README.md`
 - 需求与验收：`docs/01-需求文档.md`
@@ -118,6 +119,7 @@ ctest --test-dir build --output-on-failure
 性能：SnapOCR.exe --perf-selftest → PASS（热键→遮罩 67ms / 4K 捕获 57ms /
       区域裁剪 2ms / OCR 91ms / 空闲工作集 28MB）
 冒烟：SnapOCR.exe --smoke-test → platform=windows, PASS, exit 0
-CLI：SnapOCR.exe --version → SnapOCR 0.1.2
-发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2（CI 打包 + sha256 校验 + 独立运行验证）
+CLI：SnapOCR.exe --version → SnapOCR 1.0.0
+发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2 / v1.0.0-rc.1
+     （CI 打包绿色包 + Inno Setup 安装包，sha256 校验 + 独立运行验证）
 ```
