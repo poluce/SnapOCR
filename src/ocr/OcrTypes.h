@@ -25,7 +25,8 @@ struct OcrResult
     bool ok = false;
     QString errorMessage;
     QString languageTag;
-    QString fullText;
+    QString fullText;   // 引擎原始输出（保留换行，便于排查）
+    QString cleanText;  // 段落合并/清理排版后的文本（F-OCR-08）
     QVector<OcrLine> lines;
     qint64 elapsedMs = 0;
 };

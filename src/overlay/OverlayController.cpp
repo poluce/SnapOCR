@@ -1,5 +1,7 @@
 #include "overlay/OverlayController.h"
 
+#include "ocr/OcrHints.h"
+
 #include <QApplication>
 #include <QCursor>
 #include <QTimer>
@@ -482,6 +484,19 @@ void OverlayController::requestCopy()
         emit copyRequested(image);
     }
     finish();
+}
+
+bool OverlayController::lastSelectionTouchesScreenEdge() const
+{
+    if (m_virtualLogicalDesktop.isEmpty()) {
+        return false;
+    }
+    const QRect selection = m_selection.rect();
+    if (selection.isEmpty()) {
+        return false;
+    }
+    // 选区与虚拟桌面都用逻辑坐标，直接比较边界即可
+    return ocr::selectionTouchesScreenEdge(selection, m_virtualLogicalDesktop);
 }
 
 void OverlayController::requestPin()

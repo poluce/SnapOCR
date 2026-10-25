@@ -1,5 +1,7 @@
 #include "ocr/OcrService.h"
 
+#include "ocr/OcrTextUtils.h"
+
 #include <exception>
 #include <utility>
 
@@ -134,6 +136,13 @@ void OcrService::recognizeAsync(const QImage& image, const QString& languageTag)
 
         // 以服务端到端耗时为准（包含引擎内部耗时），便于 UI 展示。
         result.elapsedMs = elapsedTimer.elapsed();
+
+        // F-OCR-08：段落合并 / 清理排版。fullText 保留引擎原样，
+        // cleanText 给界面与复制使用（合并被排版拆断的段落、压缩多余空格）。
+        if (result.ok && !result.fullText.isEmpty())
+        {
+            result.cleanText = normalizeText(result.fullText);
+        }
         return result;
     });
     watcher->setFuture(future);

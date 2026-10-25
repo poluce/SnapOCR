@@ -5,6 +5,7 @@
 
 #include "ocr/OcrTypes.h"
 
+class QCheckBox;
 class QPlainTextEdit;
 class QLabel;
 class QPushButton;
@@ -19,7 +20,8 @@ class OcrResultDialog final : public QDialog
 public:
     explicit OcrResultDialog(QWidget* parent = nullptr);
 
-    void setResult(const snapocr::ocr::OcrResult& result);
+    // problemHint：识别失败/无结果时的可执行提示（见 ocr/OcrHints）
+    void setResult(const snapocr::ocr::OcrResult& result, const QString& problemHint = QString());
     void setBusy(const QString& message);
     QString text() const;
 
@@ -32,6 +34,9 @@ private:
     QLabel* m_infoLabel = nullptr;
     QPushButton* m_copyButton = nullptr;
     QPushButton* m_retryButton = nullptr;
+    QCheckBox* m_mergeParagraphs = nullptr;
+    snapocr::ocr::OcrResult m_result;
+    QString m_problemHint;
 };
 
 }  // namespace snapocr::ui

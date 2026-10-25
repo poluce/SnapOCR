@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QClipboard>
+#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QPlainTextEdit>
@@ -17,6 +18,22 @@ OcrResultDialog::OcrResultDialog(QWidget* parent)
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     resize(560, 420);
 
+    setStyleSheet(QStringLiteral(R"(
+        QDialog { background: #F7F8FA; }
+        QLabel { color: #5A616B; font-size: 12px; }
+        QPlainTextEdit {
+            background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 10px;
+            padding: 8px; color: #2B2F36; font-size: 13px; selection-background-color: #1F6FEB;
+        }
+        QCheckBox { color: #2B2F36; font-size: 12px; }
+        QPushButton {
+            background: #FFFFFF; border: 1px solid #E5E8ED; border-radius: 8px;
+            padding: 6px 14px; color: #2B2F36; font-size: 13px;
+        }
+        QPushButton:hover { border-color: #1F6FEB; color: #1F6FEB; }
+        QPushButton:pressed { background: #E8F0FE; }
+    )"));
+
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(8);
@@ -28,6 +45,12 @@ OcrResultDialog::OcrResultDialog(QWidget* parent)
     m_textEdit = new QPlainTextEdit(this);
     m_textEdit->setPlaceholderText(QStringLiteral("识别结果会显示在这里"));
     layout->addWidget(m_textEdit, 1);
+
+    m_mergeParagraphs = new QCheckBox(QStringLiteral("合并段落（清理排版）"), this);
+    m_mergeParagraphs->setChecked(true);
+    m_mergeParagraphs->setToolTip(
+        QStringLiteral("把被排版拆断的行合并成段落；取消勾选可保留引擎原始换行"));
+    layout->addWidget(m_mergeParagraphs);
 
     auto* buttons = new QDialogButtonBox(this);
     m_retryButton = buttons->addButton(QStringLiteral("重新识别"), QDialogButtonBox::ActionRole);
@@ -44,26 +67,52 @@ OcrResultDialog::OcrResultDialog(QWidget* parent)
         emit copyRequested(content);
         m_infoLabel->setText(QStringLiteral("已复制到剪贴板"));
     });
+    connect(m_mergeParagraphs, &QCheckBox::toggled, this, [this](bool) {
+        if (m_result.ok) {
+            setResult(m_result, m_problemHint);
+        }
+    });
     connect(m_retryButton, &QPushButton::clicked, this, &OcrResultDialog::retryRequested);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
 }
 
-void OcrResultDialog::setResult(const ocr::OcrResult& result)
+void OcrResultDialog::setResult(const ocr::OcrResult& result, const QString& problemHint)
 {
+    m_result = result;
+    m_problemHint = problemHint;
+
     if (!result.ok) {
-        m_infoLabel->setText(QStringLiteral("识别失败：%1").arg(result.errorMessage));
+        m_infoLabel->setText(m_problemHint.isEmpty()
+                                 ? QStringLiteral("识别失败：%1").arg(result.errorMessage)
+                                 : m_problemHint);
         m_textEdit->setPlainText(QString());
+        m_mergeParagraphs->setEnabled(false);
         return;
     }
 
-    m_textEdit->setPlainText(result.fullText);
+    m_mergeParagraphs->setEnabled(!result.cleanText.isEmpty()
+                                 && result.cleanText != result.fullText);
+
+    const QString& text = m_mergeParagraphs->isChecked() && !result.cleanText.isEmpty()
+                              ? result.cleanText
+                              : result.fullText;
+    m_textEdit->setPlainText(text);
+
+    if (result.fullText.trimmed().isEmpty()) {
+        m_infoLabel->setText(m_problemHint.isEmpty()
+                                 ? QStringLiteral("未识别到文字，可尝试重新框选或改用更大的区域")
+                                 : m_problemHint);
+        return;
+    }
+
     QString info = QStringLiteral("语言：%1 · 耗时：%2ms · %3 行")
                        .arg(result.languageTag.isEmpty() ? QStringLiteral("系统默认")
                                                          : result.languageTag)
                        .arg(result.elapsedMs)
                        .arg(result.lines.size());
-    if (result.fullText.trimmed().isEmpty()) {
-        info = QStringLiteral("未识别到文字，可尝试重新框选或改用更大的区域");
+    if (m_mergeParagraphs->isChecked() && !result.cleanText.isEmpty()
+        && result.cleanText != result.fullText) {
+        info += QStringLiteral(" · 已合并段落");
     }
     m_infoLabel->setText(info);
 }

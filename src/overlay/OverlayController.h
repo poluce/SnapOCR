@@ -43,6 +43,9 @@ public:
     bool isActive() const { return m_active; }
     bool isEditing() const { return m_editor != nullptr; }
 
+    // 选区是否贴到虚拟桌面边缘（OCR 裁边提示用，见 F-OCR-09）
+    bool lastSelectionTouchesScreenEdge() const;
+
     void setAnnotationStyle(const annotate::AnnotationStyle& style);
     annotate::AnnotationStyle annotationStyle() const { return m_style; }
 
@@ -78,6 +81,8 @@ private:
 
     void requestCopy();
     void requestPin();
+    // 选区是否贴到虚拟桌面边缘（OCR 裁边提示用，见 F-OCR-09）
+
     void updateMagnifierFromCursor();
     void finishPendingTextInput();
     void requestSave();

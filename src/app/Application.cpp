@@ -29,6 +29,7 @@
 #include "capture/CaptureService.h"
 #include "common/Logging.h"
 #include "common/Settings.h"
+#include "ocr/OcrHints.h"
 #include "ocr/OcrService.h"
 #include "ocr/WindowsOcrEngine.h"
 #include "overlay/OverlayController.h"
@@ -529,6 +530,9 @@ void Application::runOcr(const QImage& image)
     }
 
     m_lastOcrImage = image;
+    m_lastOcrSelectionSize = image.size();
+    m_lastOcrTouchesEdge =
+        m_overlayController != nullptr && m_overlayController->lastSelectionTouchesScreenEdge();
 
     ui::OcrResultDialog* dialog = ensureOcrDialog();
     dialog->setBusy(QStringLiteral("正在识别…（离线本地识别）"));
@@ -572,23 +576,27 @@ ui::OcrResultDialog* Application::ensureOcrDialog()
 void Application::onOcrFinished(const ocr::OcrResult& result)
 {
     ui::OcrResultDialog* dialog = ensureOcrDialog();
-    dialog->setResult(result);
+    const QString problem =
+        ocr::describeOcrProblem(result, m_lastOcrSelectionSize, m_lastOcrTouchesEdge);
+    dialog->setResult(result, problem);
     dialog->show();
     dialog->raise();
 
+    // F-OCR-09：把引擎错误翻译成可执行的提示（语言包缺失/选区太小/贴边裁字/超时）
     if (!result.ok) {
-        showError(QStringLiteral("文字识别失败：%1").arg(result.errorMessage));
+        showError(problem);
         return;
     }
 
     const QString text = result.fullText.trimmed();
     if (text.isEmpty()) {
-        showInfo(QStringLiteral("未识别到文字，可重新框选更大区域再试"));
+        showInfo(problem);
         return;
     }
 
+    const QString copyText = result.cleanText.isEmpty() ? result.fullText : result.cleanText;
     if (m_settings.ocrAutoCopy) {
-        QApplication::clipboard()->setText(result.fullText);
+        QApplication::clipboard()->setText(copyText);
         showInfo(QStringLiteral("已识别 %1 行文字并复制到剪贴板（%2ms）")
                      .arg(result.lines.size())
                      .arg(result.elapsedMs));

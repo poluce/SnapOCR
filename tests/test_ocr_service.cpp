@@ -80,6 +80,8 @@ void OcrServiceTest::recognizesAsynchronously()
     const OcrResult result = resultAt(spy, 0);
     QVERIFY(result.ok);
     QCOMPARE(result.fullText, QStringLiteral("第一行\n第二行"));
+    // F-OCR-08：cleanText 合并被排版拆断的段落，fullText 保留引擎原始输出
+    QCOMPARE(result.cleanText, QStringLiteral("第一行第二行"));
     QCOMPARE(result.languageTag, QStringLiteral("fake-CN"));
     QCOMPARE(static_cast<int>(result.lines.size()), 2);
     // 服务按端到端耗时填充 elapsedMs（>= 假引擎的 30ms 延迟）。

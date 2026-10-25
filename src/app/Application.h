@@ -3,6 +3,7 @@
 #include <QImage>
 #include <QObject>
 #include <QPointer>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 
@@ -104,6 +105,8 @@ private:
     history::HistoryStore* m_history = nullptr;
     QPointer<ui::HistoryDialog> m_historyDialog;
     QImage m_lastOcrImage;
+    QSize m_lastOcrSelectionSize;
+    bool m_lastOcrTouchesEdge = false;
     bool m_initialized = false;
 
     // 延时截图：倒计时期间忽略重复触发，到点后按记录的模式开始捕获。
