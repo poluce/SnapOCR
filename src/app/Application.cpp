@@ -1123,6 +1123,35 @@ int Application::runStabilitySelfTest()
     platform::win32::ProcessMetrics last;
     platform::win32::ProcessMetrics current;
 
+    // 预热一轮：首次捕获/绘制会一次性分配句柄与字体缓存（实测可达 +4~+8），
+    // 不计入泄漏判定，否则打包版首跑会被误判为“疑似泄漏”。
+    for (int warmup = 0; warmup < 1; ++warmup) {
+        capture::CaptureResult warmupCaptured;
+        QString warmupError;
+        if (!platform::win32::ScreenCapture::captureAll(&warmupCaptured, &warmupError)) {
+            out << "FAIL: 预热捕获失败：" << warmupError << '\n';
+            out.flush();
+            return EXIT_FAILURE;
+        }
+        if (!warmupCaptured.screens.isEmpty()) {
+            const QRect geometry = warmupCaptured.screens.first().monitor.physicalGeometry;
+            const QRect region = QRect(0, 0, qMin(640, geometry.width()),
+                                       qMin(480, geometry.height()));
+            const QImage regionImage = capture::cropSelection(warmupCaptured, region);
+            annotate::AnnotationDocument document;
+            document.setBaseImage(regionImage);
+            annotate::AnnotationItem rectangle;
+            rectangle.kind = annotate::AnnotationKind::Rectangle;
+            rectangle.points = {QPointF(20, 20), QPointF(200, 160)};
+            document.addItem(rectangle);
+            const QImage rendered = document.render();
+            QByteArray bytes;
+            QBuffer buffer(&bytes);
+            buffer.open(QIODevice::WriteOnly);
+            rendered.save(&buffer, "PNG");
+        }
+    }
+
     for (int iteration = 0; iteration < kIterations; ++iteration) {
         capture::CaptureResult captured;
         QString error;
