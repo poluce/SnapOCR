@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QCursor>
 #include <windows.h>
+#include <tlhelp32.h>
 
 #include <QBuffer>
 #include <QElapsedTimer>
@@ -23,6 +24,10 @@
 #include <QScreen>
 #include <QMessageBox>
 #include <QStandardPaths>
+#include <QSysInfo>
+#include <QFileInfo>
+#include "capture/MonitorLayout.h"
+#include <QStringList>
 #include <QTextStream>
 #include <QTimer>
 
@@ -125,6 +130,7 @@ constexpr auto kFlagSmokeTest = "--smoke-test";
 constexpr auto kFlagCaptureSelfTest = "--capture-selftest";
 constexpr auto kFlagStabilitySelfTest = "--stability-selftest";
 constexpr auto kFlagPerfSelfTest = "--perf-selftest";
+constexpr auto kFlagDoctor = "--doctor";
 constexpr auto kFlagCrashSelfTest = "--crash-selftest";
 constexpr auto kFlagSettings = "--settings";
 
@@ -169,6 +175,9 @@ int Application::run(const QStringList& arguments)
     }
     if (args.contains(QString::fromLatin1(kFlagPerfSelfTest))) {
         return runPerfSelfTest();
+    }
+    if (args.contains(QString::fromLatin1(kFlagDoctor))) {
+        return runDoctor();
     }
     if (args.contains(QString::fromLatin1(kFlagCrashSelfTest))) {
         // 崩溃记录自检：安装记录器后主动触发访问冲突，进程应写出 crash-*.txt
@@ -1221,6 +1230,194 @@ int Application::runStabilitySelfTest()
     out << "FAIL: 疑似资源泄漏（超过阈值）\n";
     out.flush();
     return EXIT_FAILURE;
+}
+
+int Application::runDoctor()
+{
+    QTextStream out(stdout);
+    out << "SnapOCR doctor\n";
+
+    // ---- 版本与系统 ----
+    out << "  version      : " << QString::fromUtf8(version::kVersion) << " ("
+        << QSysInfo::currentCpuArchitecture() << ")\n";
+    out << "  os           : " << QSysInfo::prettyProductName() << " / kernel "
+        << QSysInfo::kernelVersion() << "\n";
+    out << "  qt           : " << QString::fromLatin1(qVersion()) << '\n';
+
+    // ---- DPI 感知级别 ----
+    {
+        QString awareness = QStringLiteral("unknown");
+        if (const HMODULE user32 = ::GetModuleHandleW(L"user32.dll")) {
+            using GetAwarenessFn = DPI_AWARENESS (*)(DPI_AWARENESS_CONTEXT);
+            const auto getAwareness = reinterpret_cast<GetAwarenessFn>(
+                reinterpret_cast<void*>(::GetProcAddress(user32, "GetAwarenessFromDpiAwarenessContext")));
+            if (getAwareness != nullptr) {
+                const DPI_AWARENESS_CONTEXT context = ::GetThreadDpiAwarenessContext();
+                using AreEqualFn = BOOL (*)(DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT);
+                const auto areEqual = reinterpret_cast<AreEqualFn>(reinterpret_cast<void*>(
+                    ::GetProcAddress(user32, "AreDpiAwarenessContextsEqual")));
+                const bool perMonitorV2 =
+                    areEqual != nullptr
+                    && areEqual(context, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+                switch (getAwareness(context)) {
+                case DPI_AWARENESS_UNAWARE:
+                    awareness = QStringLiteral("unaware");
+                    break;
+                case DPI_AWARENESS_SYSTEM_AWARE:
+                    awareness = QStringLiteral("system");
+                    break;
+                case DPI_AWARENESS_PER_MONITOR_AWARE:
+                    awareness = perMonitorV2 ? QStringLiteral("per-monitor-v2")
+                                             : QStringLiteral("per-monitor");
+                    break;
+                default:
+                    awareness = QStringLiteral("unknown");
+                    break;
+                }
+            }
+        }
+        out << "  dpiAwareness : " << awareness << '\n';
+    }
+
+    // ---- 显示器 ----
+    const QVector<capture::MonitorInfo> monitors = capture::MonitorLayout::enumerate();
+    out << "  monitors     : " << monitors.size() << '\n';
+    for (int index = 0; index < monitors.size(); ++index) {
+        const capture::MonitorInfo& monitor = monitors.at(index);
+        out << "    [" << index << "] " << monitor.displayName
+            << (monitor.primary ? " (primary)" : "") << "  physical="
+            << monitor.physicalGeometry.x() << ',' << monitor.physicalGeometry.y() << ' '
+            << monitor.physicalGeometry.width() << 'x' << monitor.physicalGeometry.height()
+            << "  logical=" << monitor.logicalGeometry.width() << 'x'
+            << monitor.logicalGeometry.height() << "  dpr=" << monitor.devicePixelRatio
+            << "  rotation=" << monitor.rotationDegrees << "\n";
+    }
+
+    // ---- 设置（直接读配置，不启动托盘等副作用） ----
+    common::SettingsStore settingsStore;
+    QString settingsWarning;
+    const common::AppSettings settings = settingsStore.load(&settingsWarning);
+    out << "  config       : " << settingsStore.filePath()
+        << (common::SettingsStore::portableModeRequested() ? "  (portable)" : "") << '\n';
+    if (!settingsWarning.isEmpty()) {
+        out << "  configWarning: " << settingsWarning << '\n';
+    }
+    out << "  settings     : theme=" << settings.theme
+        << " language=" << (settings.language.isEmpty() ? QStringLiteral("system")
+                                                       : settings.language)
+        << " captureHotkey=" << settings.captureHotkey
+        << " ocrHotkey=" << settings.ocrHotkey << " logLevel=" << settings.logLevel << '\n';
+    out << "  saveDir      : "
+        << (settings.saveDirectory.isEmpty() ? common::SettingsStore::defaultSaveDirectory()
+                                             : settings.saveDirectory)
+        << " format=" << settings.saveFormat << '\n';
+    out << "  logs         : " << common::defaultLogDirectory() << '\n';
+
+    // ---- OCR 语言 ----
+    {
+        const ocr::WindowsOcrEngine engine;
+        const QVector<ocr::OcrLanguage> languages = engine.availableLanguages();
+        out << "  ocrLanguages : " << languages.size();
+        for (int index = 0; index < languages.size() && index < 6; ++index) {
+            out << (index == 0 ? " -> " : "; ") << languages.at(index).tag << ' '
+                << languages.at(index).displayName;
+        }
+        out << '\n';
+    }
+
+    // ---- VC++ 运行库（干净机器最常见的启动失败原因） ----
+    {
+        QStringList found;
+        for (const QString& dll :
+             {QStringLiteral("vcruntime140.dll"), QStringLiteral("vcruntime140_1.dll"),
+              QStringLiteral("msvcp140.dll")}) {
+            if (!QFileInfo::exists(QStringLiteral("C:/Windows/System32/") + dll)) {
+                found.append(dll + QStringLiteral("=MISSING"));
+            }
+        }
+        out << "  vcruntime    : " << (found.isEmpty() ? QStringLiteral("present") : found.join(", "))
+            << '\n';
+    }
+
+    // ---- 桌面会话 / 剪贴板 ----
+    {
+        // 锁屏判定：读当前输入桌面名字——交互会话是 Default，锁屏时是 Winlogon。
+        QString desktopName;
+        if (const HDESK inputDesktop =
+                ::OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS | DESKTOP_SWITCHDESKTOP)) {
+            wchar_t buffer[256] = {};
+            DWORD needed = 0;
+            if (::GetUserObjectInformationW(inputDesktop, UOI_NAME, buffer, sizeof(buffer),
+                                            &needed)
+                != FALSE) {
+                desktopName = QString::fromWCharArray(buffer);
+            }
+            ::CloseDesktop(inputDesktop);
+        }
+        // 桌面名在锁屏时可能仍报 Default，最可靠的信号是 LogonUI.exe 是否存在
+        // （它只在锁屏安全桌面活动期间运行）。剪贴板能否打开作为辅助信号。
+        bool logonUiRunning = false;
+        if (const HANDLE snapshot = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            snapshot != INVALID_HANDLE_VALUE) {
+            PROCESSENTRY32W entry = {};
+            entry.dwSize = sizeof(entry);
+            if (::Process32FirstW(snapshot, &entry) != FALSE) {
+                do {
+                    if (QString::fromWCharArray(entry.szExeFile)
+                            .compare(QStringLiteral("LogonUI.exe"), Qt::CaseInsensitive)
+                        == 0) {
+                        logonUiRunning = true;
+                        break;
+                    }
+                } while (::Process32NextW(snapshot, &entry) != FALSE);
+            }
+            ::CloseHandle(snapshot);
+        }
+        out << "  session      : "
+            << (logonUiRunning ? QStringLiteral("locked (LogonUI active)")
+                               : QStringLiteral("interactive") + " (desktop=" + desktopName + ")")
+            << '\n';
+        const bool clipboardOk = ::OpenClipboard(nullptr) != FALSE;
+        if (clipboardOk) {
+            ::CloseClipboard();
+        }
+        out << "  clipboard    : " << (clipboardOk ? QStringLiteral("accessible")
+                                                   : QStringLiteral("busy/locked"))
+            << '\n';
+    }
+
+    // ---- 全局热键占用情况（临时注册后立即释放） ----
+    {
+        app::HotkeyManager hotkeys;
+        QString captureError;
+        QString ocrError;
+        const bool captureOk = hotkeys.registerHotkey(app::HotkeyManager::Action::Capture,
+                                                      settings.captureHotkey, &captureError);
+        const bool ocrOk = hotkeys.registerHotkey(app::HotkeyManager::Action::Ocr,
+                                                  settings.ocrHotkey, &ocrError);
+        out << "  hotkeys      : capture(" << settings.captureHotkey << ")="
+            << (captureOk ? QStringLiteral("ok") : captureError) << " ocr("
+            << settings.ocrHotkey << ")=" << (ocrOk ? QStringLiteral("ok") : ocrError) << '\n';
+        hotkeys.unregisterAll();
+    }
+
+    // ---- 单实例 ----
+    {
+        const QString key = QStringLiteral("Local\\") + QString::fromUtf8(version::kSingleInstanceKey);
+        HANDLE mutex = ::CreateMutexW(nullptr, FALSE, reinterpret_cast<LPCWSTR>(key.utf16()));
+        const bool alreadyRunning = mutex != nullptr && ::GetLastError() == ERROR_ALREADY_EXISTS;
+        if (mutex != nullptr) {
+            ::CloseHandle(mutex);
+        }
+        out << "  singleInst   : "
+            << (alreadyRunning ? QStringLiteral("another instance running")
+                               : QStringLiteral("idle"))
+            << '\n';
+    }
+
+    out << "PASS\n";
+    out.flush();
+    return EXIT_SUCCESS;
 }
 
 int Application::runPerfSelfTest()

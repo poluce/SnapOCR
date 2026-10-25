@@ -74,6 +74,14 @@ jobs:
           Write-Host "packaged: dist/SnapOCR-$version-win64.zip"
           (Get-Item "dist/SnapOCR-$version-win64.zip").Length
 
+      - name: Environment diagnostics (--doctor)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          build/SnapOCR.exe --doctor
+          Write-Host "doctor exit: $LASTEXITCODE"
+
       - name: Build installer (Inno Setup)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh

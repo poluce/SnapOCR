@@ -79,6 +79,8 @@ private:
     int runStabilitySelfTest();
     // 性能自检：捕获耗时 / OCR 端到端耗时 / 进程资源（阶段三 §8.2 验收）
     int runPerfSelfTest();
+    // 环境诊断（排障用）：系统/DPI/显示器/OCR 语言/运行库/剪贴板/热键/路径
+    int runDoctor();
     void printVersion() const;
     void printHelp() const;
 
