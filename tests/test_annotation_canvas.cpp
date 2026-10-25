@@ -44,6 +44,9 @@ private slots:
     void resizeHandleDragScalesItem();
     void ctrlBracketChangesLayerOrder();
     void drawsBlurStroke();
+    void undoBeyondHistoryDoesNothing();
+    void newActionClearsRedoStack();
+    void deleteWithNoSelectionIsNoop();
 
 private:
     void dragFrom(const QPoint& from, const QPoint& to);
@@ -251,6 +254,45 @@ void AnnotationCanvasTest::clickingNewPositionDiscardsEmptyTextInput()
     QVERIFY(m_canvas->isTextInputActive());  // 新位置打开了一个新的输入框
     m_canvas->commitOrDiscardTextInput();
     QCOMPARE(m_document.items().size(), 0);
+}
+
+void AnnotationCanvasTest::undoBeyondHistoryDoesNothing()
+{
+    // 空文档连续撤销/重做不应崩溃、不应产生图元
+    m_canvas->undo();
+    m_canvas->undo();
+    QCOMPARE(m_document.items().size(), 0);
+    m_canvas->redo();
+    m_canvas->redo();
+    QCOMPARE(m_document.items().size(), 0);
+}
+
+void AnnotationCanvasTest::newActionClearsRedoStack()
+{
+    m_canvas->setTool(annotate::AnnotationKind::Rectangle);
+    dragFrom(QPoint(20, 20), QPoint(80, 60));   // 第一个图元
+    dragFrom(QPoint(100, 100), QPoint(160, 140));  // 第二个图元
+    QCOMPARE(m_document.items().size(), 2);
+
+    m_canvas->undo();
+    QCOMPARE(m_document.items().size(), 1);
+    QVERIFY(m_canvas->canRedo());
+
+    // 撤销后画新图元：重做栈必须被清空（否则会重做回旧分支）
+    dragFrom(QPoint(200, 20), QPoint(260, 60));
+    QCOMPARE(m_document.items().size(), 2);
+    QVERIFY(!m_canvas->canRedo());
+}
+
+void AnnotationCanvasTest::deleteWithNoSelectionIsNoop()
+{
+    m_canvas->setTool(annotate::AnnotationKind::Rectangle);
+    dragFrom(QPoint(20, 20), QPoint(80, 60));
+    QCOMPARE(m_document.items().size(), 1);
+
+    QTest::keyClick(m_canvas, Qt::Key_Delete);
+    QTest::qWait(10);
+    QCOMPARE(m_document.items().size(), 1);  // 未选中任何图元时删除不生效
 }
 
 void AnnotationCanvasTest::resizeHandleDragScalesItem()

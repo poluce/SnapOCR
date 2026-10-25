@@ -20,6 +20,7 @@ private slots:
     void skipsDuplicateFrames();
     void widthMismatchFails();
     void emptyFramesFail();
+    void singleFrameReturnsItself();
 
 private:
     static QImage makeLongImage(int width, int height);
@@ -122,6 +123,15 @@ void ScrollingStitchTest::emptyFramesFail()
     const StitchResult result = stitchFrames({}, 100);
     QVERIFY(!result.ok);
     QVERIFY(!result.error.isEmpty());
+}
+
+void ScrollingStitchTest::singleFrameReturnsItself()
+{
+    const QImage frame = makeLongImage(70, 300);
+    const StitchResult result = stitchFrames({frame}, 100);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    QCOMPARE(result.image.size(), frame.size());
+    QVERIFY(result.offsets.isEmpty());
 }
 
 QTEST_GUILESS_MAIN(ScrollingStitchTest)

@@ -48,6 +48,9 @@ private slots:
     void layerOrderMovesItemToTop();
     void moveItemUpSwapsOrder();
     void blurStrokeChangesPixels();
+    void renderWithoutItemsReturnsBaseCopy();
+    void renderWithoutBaseImageIsNull();
+    void hitTestOutsideReturnsMinusOne();
 };
 
 void AnnotationDocumentTest::setsBaseImageAndClearsItems()
@@ -283,6 +286,41 @@ void AnnotationDocumentTest::blurStrokeChangesPixels()
         }
     }
     QVERIFY(hasGray);
+}
+
+void AnnotationDocumentTest::renderWithoutItemsReturnsBaseCopy()
+{
+    AnnotationDocument document;
+    QImage base(40, 30, QImage::Format_ARGB32);
+    base.fill(QColor(0x12, 0x34, 0x56));
+    document.setBaseImage(base);
+
+    const QImage rendered = document.render();
+    QCOMPARE(rendered.size(), base.size());
+    QCOMPARE(rendered.pixelColor(5, 5), base.pixelColor(5, 5));
+}
+
+void AnnotationDocumentTest::renderWithoutBaseImageIsNull()
+{
+    AnnotationDocument document;
+    QVERIFY(document.render().isNull());
+}
+
+void AnnotationDocumentTest::hitTestOutsideReturnsMinusOne()
+{
+    AnnotationDocument document;
+    QImage base(100, 100, QImage::Format_ARGB32);
+    base.fill(Qt::white);
+    document.setBaseImage(base);
+
+    AnnotationItem rectangle;
+    rectangle.kind = AnnotationKind::Rectangle;
+    rectangle.points = {QPointF(20, 20), QPointF(60, 60)};
+    document.addItem(rectangle);
+
+    QCOMPARE(document.hitTest(QPointF(40, 40)), 0);       // 内部命中
+    QCOMPARE(document.hitTest(QPointF(-10, -10)), -1);    // 外部不命中
+    QCOMPARE(document.hitTest(QPointF(500, 500)), -1);    // 远处不命中
 }
 
 QTEST_MAIN(AnnotationDocumentTest)
