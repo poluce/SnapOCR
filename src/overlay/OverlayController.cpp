@@ -246,6 +246,20 @@ void OverlayController::showToolbar()
                 m_editor->setStyle(m_style);
             }
         });
+        connect(m_toolbar, &OverlayToolbar::fillToggled, this, [this](bool filled) {
+            finishPendingTextInput();
+            m_style.filled = filled;
+            if (m_editor != nullptr) {
+                m_editor->setStyle(m_style);
+            }
+        });
+        connect(m_toolbar, &OverlayToolbar::dashToggled, this, [this](bool dashed) {
+            finishPendingTextInput();
+            m_style.dashed = dashed;
+            if (m_editor != nullptr) {
+                m_editor->setStyle(m_style);
+            }
+        });
         m_toolbar->setCurrentColor(m_style.color);
         m_toolbar->setCurrentWidth(m_style.width);
     }

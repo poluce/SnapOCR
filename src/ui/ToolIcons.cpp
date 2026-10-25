@@ -179,6 +179,17 @@ void drawAction(QPainter& painter, const QString& action)
         painter.drawLine(QPointF(6.5, 6.5), QPointF(8, 4));
         painter.drawLine(QPointF(8, 4), QPointF(12, 4));
         painter.drawLine(QPointF(12, 4), QPointF(13.5, 6.5));
+    } else if (action == QLatin1String("fill")) {
+        // 填充：实心方块 + 细边框
+        painter.setBrush(QColor(0x2B, 0x2F, 0x36));
+        painter.drawRect(QRectF(3.5, 3.5, 13, 13));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(QRectF(3.5, 3.5, 13, 13));
+    } else if (action == QLatin1String("dash")) {
+        // 虚线：三段短横线
+        painter.drawLine(QPointF(3, 10), QPointF(7, 10));
+        painter.drawLine(QPointF(9.5, 10), QPointF(13.5, 10));
+        painter.drawLine(QPointF(16, 10), QPointF(18, 10));
     } else if (action == QLatin1String("history")) {
         // 时钟：圆 + 指针 + 逆时针箭头
         painter.drawEllipse(QPointF(10, 10.5), 7.0, 7.0);

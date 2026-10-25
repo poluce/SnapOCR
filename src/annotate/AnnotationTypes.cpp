@@ -1,5 +1,7 @@
 #include "annotate/AnnotationTypes.h"
 
+#include "annotate/ImageBlur.h"
+
 #include <QFont>
 #include <QFontMetricsF>
 #include <QImage>
@@ -69,6 +71,7 @@ QRectF computeBounds(const AnnotationItem& item)
     case AnnotationKind::Arrow:
         return pointsBounds(item.points, item.style.width + 6);
     case AnnotationKind::Freehand:
+    case AnnotationKind::Blur:
         return pointsBounds(item.points, item.style.width);
     case AnnotationKind::Text: {
         if (item.points.isEmpty() || item.text.isEmpty()) {
@@ -91,7 +94,8 @@ QRectF computeBounds(const AnnotationItem& item)
     return {};
 }
 
-void paintItem(QPainter& painter, const AnnotationItem& item, const QImage& baseImage)
+void paintItem(QPainter& painter, const AnnotationItem& item, const QImage& baseImage,
+               const QImage& blurredBase)
 {
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, item.kind != AnnotationKind::Mosaic);
@@ -100,6 +104,13 @@ void paintItem(QPainter& painter, const AnnotationItem& item, const QImage& base
     pen.setWidthF(std::max(1.0, static_cast<double>(item.style.width)));
     pen.setCapStyle(Qt::RoundCap);
     pen.setJoinStyle(Qt::RoundJoin);
+    if (item.style.dashed) {
+        // F-ANN-18：虚线描边（随线宽变化，保证粗细视觉一致）
+        const qreal width = std::max(1.0, static_cast<double>(item.style.width));
+        QVector<qreal> pattern;
+        pattern << width * 3.0 << width * 2.0;
+        pen.setDashPattern(pattern);
+    }
     painter.setPen(pen);
     painter.setBrush(Qt::NoBrush);
 
@@ -204,6 +215,44 @@ void paintItem(QPainter& painter, const AnnotationItem& item, const QImage& base
         painter.setPen(Qt::NoPen);
         painter.setBrush(QBrush(highlight));
         painter.drawRect(QRectF(item.points[0], item.points[1]).normalized());
+        break;
+    }
+    case AnnotationKind::Blur: {
+        if (item.points.size() < 2) {
+            break;
+        }
+        // 用圆头画笔画出一条粗路径，作为模糊区域的遮罩
+        QPainterPath stroke = QPainterPath(item.points.first());
+        for (int i = 1; i < item.points.size(); ++i) {
+            stroke.lineTo(item.points[i]);
+        }
+        QPen brushPen(Qt::black);
+        brushPen.setWidthF(std::max(2.0, static_cast<double>(item.style.width) * 6.0));
+        brushPen.setCapStyle(Qt::RoundCap);
+        brushPen.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(brushPen);
+
+        const QImage& source = blurredBase.isNull() ? baseImage : blurredBase;
+        if (source.isNull()) {
+            painter.setBrush(QColor(128, 128, 128, 180));
+            painter.drawPath(stroke);
+            break;
+        }
+        // 裁到笔画范围内再画模糊图：避免整图重绘
+        const QRectF area = computeBounds(item).adjusted(-4, -4, 4, 4).intersected(QRectF(source.rect()));
+        const QImage region =
+            source.copy(area.toAlignedRect().intersected(source.rect()));
+        if (region.isNull()) {
+            break;
+        }
+        // 注意：直线路径本身没有面积，必须先用 QPainterPathStroker 描粗成轮廓
+        QPainterPathStroker stroker;
+        stroker.setWidth(brushPen.widthF());
+        stroker.setCapStyle(Qt::RoundCap);
+        stroker.setJoinStyle(Qt::RoundJoin);
+        const QPainterPath outline = stroker.createStroke(stroke);
+        painter.setClipPath(outline, Qt::IntersectClip);
+        painter.drawImage(area.topLeft(), region);
         break;
     }
     case AnnotationKind::Mosaic: {

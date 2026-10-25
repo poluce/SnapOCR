@@ -28,6 +28,13 @@ public:
 
     int hitTest(const QPointF& imagePos) const;
 
+    // F-ANN-17：缩放/层级。targetBounds 是图元新的包围盒（图像像素）。
+    bool scaleItem(int index, const QRectF& targetBounds);
+    bool moveItemToTop(int index);
+    bool moveItemToBottom(int index);
+    bool moveItemUp(int index);
+    bool moveItemDown(int index);
+
     // 合成输出：底图 + 全部图元，尺寸与底图一致（物理像素 1:1）。
     QImage render() const;
 
@@ -40,6 +47,9 @@ public:
 private:
     QImage m_baseImage;
     QVector<AnnotationItem> m_items;
+    // 模糊笔刷需要底图的模糊版本，按需生成并缓存（底图变化时失效）
+    mutable QImage m_blurredBase;
+    mutable bool m_blurredBaseReady = false;
 };
 
 }  // namespace snapocr::annotate

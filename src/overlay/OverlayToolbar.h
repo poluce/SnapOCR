@@ -44,6 +44,8 @@ signals:
     void redoRequested();
     void colorChangeRequested(const QColor& color);
     void widthChangeRequested(int width);
+    void fillToggled(bool filled);
+    void dashToggled(bool dashed);
 
 protected:
     bool event(QEvent* event) override;
@@ -67,6 +69,8 @@ private:
     QButtonGroup* m_toolGroupBox = nullptr;
     QToolButton* m_colorButton = nullptr;
     QToolButton* m_widthButton = nullptr;
+    QToolButton* m_fillButton = nullptr;
+    QToolButton* m_dashButton = nullptr;
     QVector<QToolButton*> m_toolButtons;
     bool m_editing = false;
     bool m_selectDrawn = false;

@@ -64,6 +64,10 @@ private:
     void commitTextInput();
     void cancelTextInput();
     QRectF selectedBounds() const;
+    // 选中图元的缩放控制点（图像像素）：返回 -1 表示未命中
+    int resizeHandleAt(const QPointF& imagePos) const;
+    void beginResize(int handle, const QPointF& imagePos);
+    void updateResize(const QPointF& imagePos);
 
     annotate::AnnotationDocument* m_document = nullptr;
     annotate::AnnotationKind m_tool = annotate::AnnotationKind::Rectangle;
@@ -79,6 +83,14 @@ private:
     bool m_movingSelected = false;
     QPointF m_moveStartImage;
     QVector<QPointF> m_moveOriginalPoints;
+
+    // F-ANN-17：拖拽控制点缩放选中图元
+    int m_resizeHandle = -1;
+    bool m_resizing = false;
+    QRectF m_resizeStartBounds;
+    QPointF m_resizeStartImage;
+    QVector<QPointF> m_resizeOriginalPoints;
+    int m_resizeOriginalFontSize = 0;
 
     QPointer<QTextEdit> m_textEditor;
     QPointF m_textImagePos;

@@ -36,6 +36,7 @@ const ToolDefinition kTools[] = {
     {annotate::AnnotationKind::StepNumber, "序号"},
     {annotate::AnnotationKind::Highlight, "高亮"},
     {annotate::AnnotationKind::Mosaic, "马赛克"},
+    {annotate::AnnotationKind::Blur, "模糊笔刷"},
 };
 
 // 工具条为浅色主题：深色描边图标。
@@ -137,8 +138,19 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
     m_widthButton->setText(QStringLiteral("3"));
     m_widthButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
     m_widthButton->setFixedSize(28, 28);
+    m_fillButton = makeButton(ui::actionIcon(QStringLiteral("fill"), kToolbarInk),
+                              QStringLiteral("填充：矩形/椭圆是否实心填充"), QStringLiteral("fillButton"));
+    m_fillButton->setCheckable(true);
+    m_fillButton->setFixedSize(28, 28);
+    m_dashButton = makeButton(ui::actionIcon(QStringLiteral("dash"), kToolbarInk),
+                              QStringLiteral("虚线：描边使用虚线"), QStringLiteral("dashButton"));
+    m_dashButton->setCheckable(true);
+    m_dashButton->setFixedSize(28, 28);
+
     styleLayout->addWidget(m_colorButton);
     styleLayout->addWidget(m_widthButton);
+    styleLayout->addWidget(m_fillButton);
+    styleLayout->addWidget(m_dashButton);
 
     connect(m_colorButton, &QToolButton::clicked, this, [this]() {
         const QColor chosen = QColorDialog::getColor(m_colorButton->property("color").value<QColor>(),
@@ -157,6 +169,13 @@ OverlayToolbar::OverlayToolbar(QWidget* parent)
             setCurrentWidth(width);
             emit widthChangeRequested(width);
         }
+    });
+
+    connect(m_fillButton, &QToolButton::toggled, this, [this](bool checked) {
+        emit fillToggled(checked);
+    });
+    connect(m_dashButton, &QToolButton::toggled, this, [this](bool checked) {
+        emit dashToggled(checked);
     });
 
     // ---- 动作按钮（始终显示，排在最后） ----

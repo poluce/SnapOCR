@@ -41,6 +41,9 @@ private slots:
     void typedTextInputCommitsOneItem();
     void clickingNewPositionDiscardsEmptyTextInput();
     void resettingBaseImageClearsItems();
+    void resizeHandleDragScalesItem();
+    void ctrlBracketChangesLayerOrder();
+    void drawsBlurStroke();
 
 private:
     void dragFrom(const QPoint& from, const QPoint& to);
@@ -248,6 +251,88 @@ void AnnotationCanvasTest::clickingNewPositionDiscardsEmptyTextInput()
     QVERIFY(m_canvas->isTextInputActive());  // 新位置打开了一个新的输入框
     m_canvas->commitOrDiscardTextInput();
     QCOMPARE(m_document.items().size(), 0);
+}
+
+void AnnotationCanvasTest::resizeHandleDragScalesItem()
+{
+    // 画一个矩形（控件 50,50 → 200,150；图像 100,100 → 400,300）
+    m_canvas->setTool(annotate::AnnotationKind::Rectangle);
+    dragFrom(QPoint(50, 50), QPoint(200, 150));
+    QCOMPARE(m_document.items().size(), 1);
+
+    // 切到选择模式并点中图元
+    m_canvas->setSelectMode(true);
+    QTest::mouseClick(m_canvas, Qt::LeftButton, Qt::NoModifier, QPoint(120, 100));
+    QTest::qWait(10);
+
+    const QRectF before = annotate::computeBounds(m_document.items().at(0));
+
+    // 从右下控制点拖到 (250,200)：图像坐标 (500,400)
+    QTest::mousePress(m_canvas, Qt::LeftButton, Qt::NoModifier, QPoint(201, 151));
+    for (int i = 1; i <= 4; ++i) {
+        QTest::mouseMove(m_canvas, QPoint(201 + (250 - 201) * i / 4, 151 + (200 - 151) * i / 4));
+    }
+    QTest::mouseRelease(m_canvas, Qt::LeftButton, Qt::NoModifier, QPoint(250, 200));
+    QTest::qWait(10);
+
+    const QRectF after = annotate::computeBounds(m_document.items().at(0));
+    QVERIFY(after.width() > before.width());
+    QVERIFY(after.height() > before.height());
+    // 右下角应接近图像坐标 500,400（允许几个像素的控制点误差）
+    QVERIFY(qAbs(after.right() - 500.0) < 12.0);
+    QVERIFY(qAbs(after.bottom() - 400.0) < 12.0);
+}
+
+void AnnotationCanvasTest::ctrlBracketChangesLayerOrder()
+{
+    annotate::AnnotationItem first;
+    first.kind = annotate::AnnotationKind::Rectangle;
+    first.points = {QPointF(10, 10), QPointF(60, 60)};
+    m_document.addItem(first);
+
+    annotate::AnnotationItem second;
+    second.kind = annotate::AnnotationKind::Ellipse;
+    second.points = {QPointF(10, 10), QPointF(60, 60)};
+    m_document.addItem(second);
+
+    m_canvas->setSelectMode(true);
+    // 点中区域：命中测试返回最上层（椭圆），再 Ctrl+] 也无法再上移；
+    // 因此先点两次确保选中后，用 Ctrl+Shift+] 置顶 + Ctrl+Shift+[ 置底验证。
+    QTest::mouseClick(m_canvas, Qt::LeftButton, Qt::NoModifier, QPoint(20, 20));
+    QTest::qWait(10);
+
+    QKeyEvent topEvent(QEvent::KeyPress, Qt::Key_BracketRight,
+                       Qt::ControlModifier | Qt::ShiftModifier);
+    QApplication::sendEvent(m_canvas, &topEvent);
+    QTest::qWait(10);
+    QCOMPARE(m_document.items().size(), 2);
+
+    // 选中顶层（椭圆），Ctrl+Shift+[ 应把它置底
+    QKeyEvent bottomEvent(QEvent::KeyPress, Qt::Key_BracketLeft,
+                          Qt::ControlModifier | Qt::ShiftModifier);
+    QApplication::sendEvent(m_canvas, &bottomEvent);
+    QTest::qWait(10);
+    QCOMPARE(m_document.items().size(), 2);
+    QCOMPARE(m_document.items().first().kind, annotate::AnnotationKind::Ellipse);
+    QCOMPARE(m_document.items().last().kind, annotate::AnnotationKind::Rectangle);
+
+    // 再 Ctrl+Shift+] 置顶回最上层
+    QKeyEvent topAgain(QEvent::KeyPress, Qt::Key_BracketRight,
+                       Qt::ControlModifier | Qt::ShiftModifier);
+    QApplication::sendEvent(m_canvas, &topAgain);
+    QTest::qWait(10);
+    QCOMPARE(m_document.items().last().kind, annotate::AnnotationKind::Ellipse);
+}
+
+void AnnotationCanvasTest::drawsBlurStroke()
+{
+    m_canvas->setTool(annotate::AnnotationKind::Blur);
+    dragFrom(QPoint(30, 30), QPoint(150, 90));
+    QCOMPARE(m_document.items().size(), 1);
+    const annotate::AnnotationItem& item = m_document.items().first();
+    QCOMPARE(item.kind, annotate::AnnotationKind::Blur);
+    QVERIFY(item.points.size() >= 2);
+    QVERIFY(item.style.width >= 3);  // 笔刷宽度按线宽放大
 }
 
 QTEST_MAIN(AnnotationCanvasTest)

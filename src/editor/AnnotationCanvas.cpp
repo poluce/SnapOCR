@@ -145,6 +145,18 @@ void AnnotationCanvas::paintEvent(QPaintEvent* event)
         painter.setPen(pen);
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(selected.adjusted(-2, -2, 2, 2));
+
+        // F-ANN-17：四角缩放控制点
+        const qreal handleSize = 7.0 / std::max<qreal>(scale, 0.0001);
+        painter.setPen(QPen(QColor(0x1F, 0x8F, 0xEB), 1.0 / std::max<qreal>(scale, 0.0001)));
+        painter.setBrush(Qt::white);
+        const QPointF corners[4] = {selected.topLeft(), selected.topRight(),
+                                    selected.bottomLeft(), selected.bottomRight()};
+        for (const QPointF& corner : corners) {
+            painter.drawRect(QRectF(corner.x() - handleSize / 2.0, corner.y() - handleSize / 2.0,
+                                    handleSize, handleSize));
+        }
+        painter.setBrush(Qt::NoBrush);
     }
     painter.restore();
 }
@@ -158,6 +170,70 @@ QRectF AnnotationCanvas::selectedBounds() const
     return annotate::computeBounds(m_document->items().at(m_selectedIndex));
 }
 
+int AnnotationCanvas::resizeHandleAt(const QPointF& imagePos) const
+{
+    if (!m_selectMode || m_selectedIndex < 0) {
+        return -1;
+    }
+    const QRectF bounds = selectedBounds();
+    if (bounds.isEmpty()) {
+        return -1;
+    }
+    // 控制点判定半径按图像缩放换算，保证屏幕上始终有 ~8px 的可点区域
+    const qreal scale = imageScale();
+    const qreal tolerance = scale > 0 ? 8.0 / scale : 8.0;
+    const QPointF corners[4] = {bounds.topLeft(), bounds.topRight(), bounds.bottomLeft(),
+                                bounds.bottomRight()};
+    for (int i = 0; i < 4; ++i) {
+        if (QLineF(imagePos, corners[i]).length() <= tolerance) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void AnnotationCanvas::beginResize(int handle, const QPointF& imagePos)
+{
+    if (m_document == nullptr || m_selectedIndex < 0) {
+        return;
+    }
+    m_resizeHandle = handle;
+    m_resizing = true;
+    m_resizeStartImage = imagePos;
+    m_resizeStartBounds = selectedBounds();
+    m_resizeOriginalPoints = m_document->items().at(m_selectedIndex).points;
+    m_resizeOriginalFontSize = m_document->items().at(m_selectedIndex).style.fontSize;
+}
+
+void AnnotationCanvas::updateResize(const QPointF& imagePos)
+{
+    if (m_document == nullptr || m_selectedIndex < 0 || m_resizeHandle < 0) {
+        return;
+    }
+    QRectF target = m_resizeStartBounds;
+    switch (m_resizeHandle) {
+    case 0:  // 左上
+        target.setTopLeft(imagePos);
+        break;
+    case 1:  // 右上
+        target.setTopRight(imagePos);
+        break;
+    case 2:  // 左下
+        target.setBottomLeft(imagePos);
+        break;
+    case 3:  // 右下
+        target.setBottomRight(imagePos);
+        break;
+    default:
+        return;
+    }
+    target = target.normalized();
+    if (target.width() < 4 || target.height() < 4) {
+        return;  // 避免缩成 0 后无法再拉回
+    }
+    m_document->scaleItem(m_selectedIndex, target);
+}
+
 void AnnotationCanvas::mousePressEvent(QMouseEvent* event)
 {
     if (m_document == nullptr || event->button() != Qt::LeftButton) {
@@ -168,6 +244,12 @@ void AnnotationCanvas::mousePressEvent(QMouseEvent* event)
     const QPointF imagePos = toImage(event->position());
 
     if (m_selectMode) {
+        // 先看是否点中已选中图元的缩放控制点（否则会误触发移动）
+        const int handle = resizeHandleAt(imagePos);
+        if (handle >= 0) {
+            beginResize(handle, imagePos);
+            return;
+        }
         m_selectedIndex = m_document->hitTest(imagePos);
         if (m_selectedIndex >= 0) {
             m_movingSelected = true;
@@ -192,6 +274,17 @@ void AnnotationCanvas::mousePressEvent(QMouseEvent* event)
         emit documentChanged();
         commitPending();
         update();
+        return;
+    }
+    case annotate::AnnotationKind::Blur: {
+        // 模糊笔刷（F-ANN-16）：与画笔一样采集路径，笔宽按线宽放大
+        m_pending = annotate::AnnotationItem{};
+        m_pending.kind = annotate::AnnotationKind::Blur;
+        m_pending.style = m_style;
+        m_pending.style.width = qMax(3, m_style.width * 2);
+        m_pending.points = {imagePos};
+        m_hasPending = true;
+        m_dragging = true;
         return;
     }
     case annotate::AnnotationKind::Freehand: {
@@ -225,6 +318,13 @@ void AnnotationCanvas::mouseMoveEvent(QMouseEvent* event)
     }
     const QPointF imagePos = toImage(event->position());
 
+    if (m_resizing) {
+        updateResize(imagePos);
+        emit documentChanged();
+        update();
+        return;
+    }
+
     if (m_movingSelected && m_selectedIndex >= 0
         && m_selectedIndex < m_document->items().size()) {
         const QPointF delta = imagePos - m_moveStartImage;
@@ -244,7 +344,8 @@ void AnnotationCanvas::mouseMoveEvent(QMouseEvent* event)
         return;
     }
 
-    if (m_pending.kind == annotate::AnnotationKind::Freehand) {
+    if (m_pending.kind == annotate::AnnotationKind::Freehand
+        || m_pending.kind == annotate::AnnotationKind::Blur) {
         if (m_pending.points.size() < 5000) {
             m_pending.points.append(imagePos);
         }
@@ -261,6 +362,14 @@ void AnnotationCanvas::mouseReleaseEvent(QMouseEvent* event)
         return;
     }
 
+    if (m_resizing) {
+        m_resizing = false;
+        m_resizeHandle = -1;
+        commitPending();
+        emit documentChanged();
+        return;
+    }
+
     if (m_movingSelected) {
         m_movingSelected = false;
         commitPending();
@@ -274,7 +383,8 @@ void AnnotationCanvas::mouseReleaseEvent(QMouseEvent* event)
     m_dragging = false;
 
     const QPointF endPos = toImage(event->position());
-    if (m_pending.kind == annotate::AnnotationKind::Freehand) {
+    if (m_pending.kind == annotate::AnnotationKind::Freehand
+        || m_pending.kind == annotate::AnnotationKind::Blur) {
         if (m_pending.points.size() >= 2) {
             m_document->addItem(m_pending);
             emit documentChanged();
@@ -327,6 +437,48 @@ void AnnotationCanvas::keyPressEvent(QKeyEvent* event)
             return;
         }
         break;
+    case Qt::Key_BracketRight: {
+        // F-ANN-17：Ctrl+] 上移一层，Ctrl+Shift+] 置顶
+        if (event->modifiers().testFlag(Qt::ControlModifier) && m_document != nullptr
+            && m_selectedIndex >= 0) {
+            const bool changed = event->modifiers().testFlag(Qt::ShiftModifier)
+                                     ? m_document->moveItemToTop(m_selectedIndex)
+                                     : m_document->moveItemUp(m_selectedIndex);
+            if (changed) {
+                if (event->modifiers().testFlag(Qt::ShiftModifier)) {
+                    m_selectedIndex = m_document->items().size() - 1;
+                } else {
+                    ++m_selectedIndex;
+                }
+                commitPending();
+                emit documentChanged();
+                update();
+            }
+            return;
+        }
+        break;
+    }
+    case Qt::Key_BracketLeft: {
+        // Ctrl+[ 下移一层，Ctrl+Shift+[ 置底
+        if (event->modifiers().testFlag(Qt::ControlModifier) && m_document != nullptr
+            && m_selectedIndex >= 0) {
+            const bool changed = event->modifiers().testFlag(Qt::ShiftModifier)
+                                     ? m_document->moveItemToBottom(m_selectedIndex)
+                                     : m_document->moveItemDown(m_selectedIndex);
+            if (changed) {
+                if (event->modifiers().testFlag(Qt::ShiftModifier)) {
+                    m_selectedIndex = 0;
+                } else {
+                    --m_selectedIndex;
+                }
+                commitPending();
+                emit documentChanged();
+                update();
+            }
+            return;
+        }
+        break;
+    }
     case Qt::Key_Z:
         if (event->modifiers().testFlag(Qt::ControlModifier)) {
             undo();
