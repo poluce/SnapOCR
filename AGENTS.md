@@ -5,7 +5,9 @@
 ## 项目是什么
 
 **SnapOCR**：Windows 10/11 上的轻量截图 + 标注 + OCR 工具（C++20 / Qt 6.11 Widgets / MSVC / CMake + Ninja）。
-当前阶段：**阶段一已完成**（基本常用功能：截图/选区、标注、OCR、热键/托盘/设置/单实例/自启），版本 0.0.1；下一阶段为**阶段二：适当添加功能**；状态以 [完成情况](docs/04-完成情况.md) 为准。
+当前阶段：**阶段二已完成并发布**（v0.1.0），**阶段三进行中**（最新补丁版 v0.1.2：
+主题一致性、稳定性审计、发布工程、i18n 119 条、拖拽导出、贴图取字/再标注）；
+剩余为需要外部环境的验证项；状态以 [完成情况](docs/04-完成情况.md) 为准。
 
 - 文档索引与维护规则：`docs/README.md`
 - 需求与验收：`docs/01-需求文档.md`
@@ -106,12 +108,15 @@ ctest --test-dir build --output-on-failure
 
 完成任何任务前，确认：构建通过、相关测试通过、文档同步、无敏感信息写入日志。
 
-## 当前验收基线（阶段一 / v0.0.1）
+## 当前验收基线（阶段三 / v0.1.2）
 
 ```text
-构建：MSVC 19.51 + Qt 6.11.1，全量编译通过
-测试：ctest 13/13 passed（坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/文本/冒烟）
-端到端：scripts\e2e-smoke.ps1 → F1 复制图像 / Ctrl+S 保存 / F4 取字 全 PASS
+构建：MSVC 19.51 + Qt 6.11.1，/W4 零告警，全量编译通过
+测试：ctest 34/34 passed（含坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/
+      主题/历史/贴图/长截图/窗口识别/i18n/资源度量/冒烟）
+稳定性：SnapOCR.exe --stability-selftest → 20 轮 PASS（GDI 零增长）
+性能：SnapOCR.exe --capture-selftest → 4K 全屏 58ms / 区域 18ms，PASS
 冒烟：SnapOCR.exe --smoke-test → platform=windows, PASS, exit 0
-CLI：SnapOCR.exe --version → SnapOCR 0.0.1
+CLI：SnapOCR.exe --version → SnapOCR 0.1.2
+发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2（CI 打包 + sha256 校验 + 独立运行验证）
 ```

@@ -436,12 +436,11 @@ void Application::registerOverlayHotkeys(bool enabled)
     }
     if (enabled) {
         // 覆盖层显示期间临时占用 Esc / Enter：窗口没焦点时也能退出或确认。
-        QString err;
-        const bool okCancel = m_hotkeys->registerHotkey(
-            HotkeyManager::Action::OverlayCancel, QStringLiteral("Esc"), &err);
-        QString err2;
-        const bool okConfirm = m_hotkeys->registerHotkey(
-            HotkeyManager::Action::OverlayConfirm, QStringLiteral("Enter"), &err2);
+        // 注册失败不阻塞流程（例如按键已被其他程序占用），覆盖层仍可用鼠标操作。
+        m_hotkeys->registerHotkey(HotkeyManager::Action::OverlayCancel, QStringLiteral("Esc"),
+                                  nullptr);
+        m_hotkeys->registerHotkey(HotkeyManager::Action::OverlayConfirm, QStringLiteral("Enter"),
+                                  nullptr);
     } else {
         m_hotkeys->unregisterHotkey(HotkeyManager::Action::OverlayCancel);
         m_hotkeys->unregisterHotkey(HotkeyManager::Action::OverlayConfirm);
