@@ -50,11 +50,11 @@ void SettingsPanel::buildUi()
 
     // ---- 界面语言（阶段三 i18n 骨架：切换后重启生效） ----
     m_language = new QComboBox(this);
-    m_language->addItem(QStringLiteral("简体中文"), QStringLiteral("zh-CN"));
+    m_language->addItem(tr("简体中文"), QStringLiteral("zh-CN"));
     m_language->addItem(QStringLiteral("English"), QStringLiteral("en-US"));
-    m_language->setToolTip(QStringLiteral("界面语言切换后需要重启 SnapOCR 生效"));
+    m_language->setToolTip(tr("界面语言切换后需要重启 SnapOCR 生效"));
     connect(m_language, &QComboBox::currentIndexChanged, this, &SettingsPanel::emitChanged);
-    root->addWidget(makeRow(QStringLiteral("界面语言"), m_language));
+    root->addWidget(makeRow(tr("界面语言"), m_language));
     root->addWidget(makeSeparator());
 
     // ---- 热键 ----
@@ -68,29 +68,29 @@ void SettingsPanel::buildUi()
 
     // 延时截图：0 = 关闭；到点后自动开始框选
     m_delaySeconds = new QComboBox(this);
-    m_delaySeconds->addItem(QStringLiteral("关闭"), 0);
-    m_delaySeconds->addItem(QStringLiteral("1 秒"), 1);
-    m_delaySeconds->addItem(QStringLiteral("2 秒"), 2);
-    m_delaySeconds->addItem(QStringLiteral("3 秒"), 3);
-    m_delaySeconds->addItem(QStringLiteral("5 秒"), 5);
-    m_delaySeconds->addItem(QStringLiteral("10 秒"), 10);
+    m_delaySeconds->addItem(tr("关闭"), 0);
+    m_delaySeconds->addItem(tr("1 秒"), 1);
+    m_delaySeconds->addItem(tr("2 秒"), 2);
+    m_delaySeconds->addItem(tr("3 秒"), 3);
+    m_delaySeconds->addItem(tr("5 秒"), 5);
+    m_delaySeconds->addItem(tr("10 秒"), 10);
     connect(m_delaySeconds, &QComboBox::currentIndexChanged, this, &SettingsPanel::emitChanged);
 
-    root->addWidget(makeRow(QStringLiteral("截图热键"), m_captureHotkey));
+    root->addWidget(makeRow(tr("截图热键"), m_captureHotkey));
     root->addWidget(makeSeparator());
-    root->addWidget(makeRow(QStringLiteral("取字热键"), m_ocrHotkey));
+    root->addWidget(makeRow(tr("取字热键"), m_ocrHotkey));
     root->addWidget(makeSeparator());
-    root->addWidget(makeRow(QStringLiteral("延时截图"), m_delaySeconds));
+    root->addWidget(makeRow(tr("延时截图"), m_delaySeconds));
 
     m_includeCursor = new ToggleSwitch(this);
     connect(m_includeCursor, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
     root->addWidget(makeSeparator());
-    root->addWidget(makeToggleRow(QStringLiteral("捕获鼠标光标"), m_includeCursor));
+    root->addWidget(makeToggleRow(tr("捕获鼠标光标"), m_includeCursor));
 
     m_detectWindows = new ToggleSwitch(this);
     connect(m_detectWindows, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
     root->addWidget(makeSeparator());
-    root->addWidget(makeToggleRow(QStringLiteral("窗口识别"), m_detectWindows));
+    root->addWidget(makeToggleRow(tr("窗口识别"), m_detectWindows));
     root->addWidget(makeGroupGap());
 
     // ---- 保存 ----
@@ -99,15 +99,15 @@ void SettingsPanel::buildUi()
     dirLayout->setContentsMargins(0, 0, 0, 0);
     dirLayout->setSpacing(8);
     m_saveDirectory = new QLineEdit(dirRow);
-    m_saveDirectory->setPlaceholderText(QStringLiteral("留空则使用 图片\\SnapOCR"));
-    auto* browseButton = new QPushButton(QStringLiteral("浏览"), dirRow);
+    m_saveDirectory->setPlaceholderText(tr("留空则使用 图片\\SnapOCR"));
+    auto* browseButton = new QPushButton(tr("浏览"), dirRow);
     browseButton->setObjectName(QStringLiteral("secondaryButton"));
     browseButton->setCursor(Qt::PointingHandCursor);
     dirLayout->addWidget(m_saveDirectory, 1);
     dirLayout->addWidget(browseButton);
     connect(browseButton, &QPushButton::clicked, this, [this]() {
         const QString dir = QFileDialog::getExistingDirectory(
-            this, QStringLiteral("选择保存目录"), m_saveDirectory->text());
+            this, tr("选择保存目录"), m_saveDirectory->text());
         if (!dir.isEmpty()) {
             m_saveDirectory->setText(dir);
             emitChanged();
@@ -116,8 +116,8 @@ void SettingsPanel::buildUi()
     connect(m_saveDirectory, &QLineEdit::editingFinished, this, &SettingsPanel::emitChanged);
 
     m_format = new QComboBox(this);
-    m_format->addItem(QStringLiteral("PNG（无损）"), QStringLiteral("png"));
-    m_format->addItem(QStringLiteral("JPG（体积小）"), QStringLiteral("jpg"));
+    m_format->addItem(tr("PNG（无损）"), QStringLiteral("png"));
+    m_format->addItem(tr("JPG（体积小）"), QStringLiteral("jpg"));
 
     auto* qualityRow = new QWidget(this);
     auto* qualityLayout = new QHBoxLayout(qualityRow);
@@ -149,13 +149,13 @@ void SettingsPanel::buildUi()
     m_nameTemplate->setPlaceholderText(QStringLiteral("SnapOCR_yyyyMMdd_HHmmss"));
     connect(m_nameTemplate, &QLineEdit::editingFinished, this, &SettingsPanel::emitChanged);
 
-    root->addWidget(makeRow(QStringLiteral("保存目录"), dirRow));
+    root->addWidget(makeRow(tr("保存目录"), dirRow));
     root->addWidget(makeSeparator());
-    root->addWidget(makeRow(QStringLiteral("保存格式"), m_format));
+    root->addWidget(makeRow(tr("保存格式"), m_format));
     root->addWidget(makeSeparator());
-    root->addWidget(makeRow(QStringLiteral("JPG 质量"), qualityRow));
+    root->addWidget(makeRow(tr("JPG 质量"), qualityRow));
     root->addWidget(makeSeparator());
-    root->addWidget(makeRow(QStringLiteral("文件名模板"), m_nameTemplate));
+    root->addWidget(makeRow(tr("文件名模板"), m_nameTemplate));
     root->addWidget(makeGroupGap());
 
     // ---- 外观 ----
@@ -183,31 +183,31 @@ void SettingsPanel::buildUi()
     m_autoStart = new ToggleSwitch(this);
     connect(m_autoStart, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
 
-    root->addWidget(makeRow(QStringLiteral("主题"), segments));
+    root->addWidget(makeRow(tr("主题"), segments));
     root->addWidget(makeSeparator());
-    root->addWidget(makeToggleRow(QStringLiteral("开机自动启动"), m_autoStart));
+    root->addWidget(makeToggleRow(tr("开机自动启动"), m_autoStart));
     root->addWidget(makeGroupGap());
 
     // ---- 文字识别 ----
     m_ocrAutoCopy = new ToggleSwitch(this);
     connect(m_ocrAutoCopy, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
-    root->addWidget(makeToggleRow(QStringLiteral("识别后自动复制"), m_ocrAutoCopy));
+    root->addWidget(makeToggleRow(tr("识别后自动复制"), m_ocrAutoCopy));
     root->addWidget(makeGroupGap());
 
     // ---- 贴图（F-ANN-20：复制后自动钉到屏幕上） ----
     m_pinOnCopy = new ToggleSwitch(this);
     connect(m_pinOnCopy, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
-    root->addWidget(makeToggleRow(QStringLiteral("复制后自动贴图"), m_pinOnCopy));
+    root->addWidget(makeToggleRow(tr("复制后自动贴图"), m_pinOnCopy));
     root->addWidget(makeGroupGap());
 
     // ---- 高级 ----
     m_logLevel = new QComboBox(this);
-    m_logLevel->addItem(QStringLiteral("错误"), QStringLiteral("error"));
-    m_logLevel->addItem(QStringLiteral("警告"), QStringLiteral("warning"));
-    m_logLevel->addItem(QStringLiteral("信息"), QStringLiteral("info"));
-    m_logLevel->addItem(QStringLiteral("调试"), QStringLiteral("debug"));
+    m_logLevel->addItem(tr("错误"), QStringLiteral("error"));
+    m_logLevel->addItem(tr("警告"), QStringLiteral("warning"));
+    m_logLevel->addItem(tr("信息"), QStringLiteral("info"));
+    m_logLevel->addItem(tr("调试"), QStringLiteral("debug"));
     connect(m_logLevel, &QComboBox::currentIndexChanged, this, &SettingsPanel::emitChanged);
-    root->addWidget(makeRow(QStringLiteral("日志级别"), m_logLevel));
+    root->addWidget(makeRow(tr("日志级别"), m_logLevel));
 }
 
 QWidget* SettingsPanel::makeSeparator()

@@ -26,20 +26,20 @@ ScrollingBar::ScrollingBar(QWidget* parent)
     layout->setContentsMargins(14, 12, 14, 12);
     layout->setSpacing(8);
 
-    m_hint = new QLabel(QStringLiteral("滚动页面，SnapOCR 会自动拼接；完成后点「完成」"), this);
+    m_hint = new QLabel(tr("滚动页面，SnapOCR 会自动拼接；完成后点「完成」"), this);
     m_hint->setObjectName(QStringLiteral("scrollingHint"));
     m_hint->setWordWrap(true);
     layout->addWidget(m_hint);
 
     auto* bottom = new QHBoxLayout;
     bottom->setSpacing(8);
-    m_progress = new QLabel(QStringLiteral("已抓取 0 帧"), this);
+    m_progress = new QLabel(tr("已抓取 0 帧"), this);
     m_progress->setObjectName(QStringLiteral("scrollingProgress"));
     bottom->addWidget(m_progress, 1);
 
-    auto* cancelButton = new QPushButton(QStringLiteral("取消"), this);
+    auto* cancelButton = new QPushButton(tr("取消"), this);
     cancelButton->setObjectName(QStringLiteral("cancelScrollingButton"));
-    auto* finishButton = new QPushButton(QStringLiteral("完成"), this);
+    auto* finishButton = new QPushButton(tr("完成"), this);
     finishButton->setObjectName(QStringLiteral("finishButton"));
     bottom->addWidget(cancelButton);
     bottom->addWidget(finishButton);
@@ -52,7 +52,7 @@ ScrollingBar::ScrollingBar(QWidget* parent)
 void ScrollingBar::setProgress(int frames, int stitchedHeight)
 {
     if (m_progress != nullptr) {
-        m_progress->setText(QStringLiteral("已抓取 %1 帧 · 约 %2 px").arg(frames).arg(stitchedHeight));
+        m_progress->setText(tr("已抓取 %1 帧 · 约 %2 px").arg(frames).arg(stitchedHeight));
     }
 }
 

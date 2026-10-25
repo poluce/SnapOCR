@@ -17,15 +17,15 @@ TrayController::TrayController(QObject* parent)
     }
 
     m_menu = new QMenu;
-    m_captureAction = m_menu->addAction(QStringLiteral("截图"));
-    m_ocrAction = m_menu->addAction(QStringLiteral("屏幕取字"));
-    QAction* historyAction = m_menu->addAction(QStringLiteral("截图历史"));
-    QAction* pinLatestAction = m_menu->addAction(QStringLiteral("贴图最近一张"));
+    m_captureAction = m_menu->addAction(tr("截图"));
+    m_ocrAction = m_menu->addAction(tr("屏幕取字"));
+    QAction* historyAction = m_menu->addAction(tr("截图历史"));
+    QAction* pinLatestAction = m_menu->addAction(tr("贴图最近一张"));
     m_menu->addSeparator();
-    QAction* showAction = m_menu->addAction(QStringLiteral("打开主窗口"));
-    QAction* settingsAction = m_menu->addAction(QStringLiteral("设置"));
+    QAction* showAction = m_menu->addAction(tr("打开主窗口"));
+    QAction* settingsAction = m_menu->addAction(tr("设置"));
     m_menu->addSeparator();
-    QAction* quitAction = m_menu->addAction(QStringLiteral("退出"));
+    QAction* quitAction = m_menu->addAction(tr("退出"));
 
     connect(m_captureAction, &QAction::triggered, this, &TrayController::captureRequested);
     connect(m_ocrAction, &QAction::triggered, this, &TrayController::ocrRequested);
@@ -94,11 +94,11 @@ void TrayController::setHotkeyTexts(const QString& captureText, const QString& o
 {
     if (m_captureAction != nullptr) {
         m_captureAction->setText(
-            QStringLiteral("截图\t%1").arg(captureText.isEmpty() ? QStringLiteral("F1") : captureText));
+            tr("截图\t%1").arg(captureText.isEmpty() ? QStringLiteral("F1") : captureText));
     }
     if (m_ocrAction != nullptr) {
         m_ocrAction->setText(
-            QStringLiteral("屏幕取字\t%1").arg(ocrText.isEmpty() ? QStringLiteral("F4") : ocrText));
+            tr("屏幕取字\t%1").arg(ocrText.isEmpty() ? QStringLiteral("F4") : ocrText));
     }
 }
 

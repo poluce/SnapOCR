@@ -35,7 +35,8 @@ void TranslatorTest::chineseIsSourceLanguage()
                                       QStringLiteral("zh-CN")));
     QVERIFY(i18n::currentUiLanguage().isEmpty());
     // 源语言下 Qt 直接返回原文
-    QCOMPARE(QCoreApplication::translate("MainWindow", "截图"), QStringLiteral("截图"));
+    QCOMPARE(QCoreApplication::translate("snapocr::ui::MainWindow", "截图"),
+             QStringLiteral("截图"));
 }
 
 void TranslatorTest::loadsEnglishTranslation()
@@ -45,15 +46,25 @@ void TranslatorTest::loadsEnglishTranslation()
     QVERIFY2(loaded, "未找到 translations/snapocr_en.qm（检查构建是否执行了 lrelease）");
     QVERIFY(!i18n::currentUiLanguage().isEmpty());
 
-    QCOMPARE(QCoreApplication::translate("MainWindow", "截图"), QStringLiteral("Capture"));
-    QCOMPARE(QCoreApplication::translate("TitleBar", "关闭"), QStringLiteral("Close"));
+    // tr() 的运行时 context 是带命名空间的类名
+    QCOMPARE(QCoreApplication::translate("snapocr::ui::MainWindow", "截图"),
+             QStringLiteral("Capture"));
+    QCOMPARE(QCoreApplication::translate("snapocr::ui::TitleBar", "关闭"),
+             QStringLiteral("Close"));
+    QCOMPARE(QCoreApplication::translate("snapocr::ui::HistoryDialog", "复制"),
+             QStringLiteral("Copy"));
+    QCOMPARE(QCoreApplication::translate("snapocr::ui::SettingsPanel", "截图热键"),
+             QStringLiteral("Capture hotkey"));
+    QCOMPARE(QCoreApplication::translate("snapocr::app::TrayController", "退出"),
+             QStringLiteral("Quit"));
 }
 
 void TranslatorTest::missingLanguageFallsBackToSource()
 {
     QVERIFY(!i18n::installUiTranslator(qobject_cast<QApplication*>(QApplication::instance()),
                                       QStringLiteral("fr-FR")));
-    QCOMPARE(QCoreApplication::translate("MainWindow", "截图"), QStringLiteral("截图"));
+    QCOMPARE(QCoreApplication::translate("snapocr::ui::MainWindow", "截图"),
+             QStringLiteral("截图"));
 }
 
 void TranslatorTest::availableLanguagesIncludeEnglish()

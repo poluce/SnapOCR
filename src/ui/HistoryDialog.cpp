@@ -41,7 +41,7 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
     : QDialog(parent)
     , m_store(store)
 {
-    setWindowTitle(QStringLiteral("截图历史"));
+    setWindowTitle(tr("截图历史"));
     setModal(false);
     resize(760, 520);
 
@@ -54,7 +54,7 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
     layout->setContentsMargins(16, 14, 16, 12);
     layout->setSpacing(10);
 
-    auto* header = new QLabel(QStringLiteral("最近 50 张截图（双击复制，可直接贴图）"), this);
+    auto* header = new QLabel(tr("最近 50 张截图（双击复制，可直接贴图）"), this);
     header->setObjectName(QStringLiteral("historyHeader"));
     layout->addWidget(header);
 
@@ -73,17 +73,17 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
     m_list->setDefaultDropAction(Qt::CopyAction);
     layout->addWidget(m_list, 1);
 
-    m_emptyHint = new QLabel(QStringLiteral("还没有历史截图：完成一次截图（复制/保存/贴图）后就会出现在这里"), this);
+    m_emptyHint = new QLabel(tr("还没有历史截图：完成一次截图（复制/保存/贴图）后就会出现在这里"), this);
     m_emptyHint->setObjectName(QStringLiteral("historyEmptyHint"));
     m_emptyHint->setAlignment(Qt::AlignCenter);
     layout->addWidget(m_emptyHint);
 
     auto* buttons = new QHBoxLayout;
     buttons->setSpacing(8);
-    m_copyButton = new QPushButton(QStringLiteral("复制"), this);
-    m_pinButton = new QPushButton(QStringLiteral("贴图"), this);
-    m_saveButton = new QPushButton(QStringLiteral("另存为…"), this);
-    m_deleteButton = new QPushButton(QStringLiteral("删除"), this);
+    m_copyButton = new QPushButton(tr("复制"), this);
+    m_pinButton = new QPushButton(tr("贴图"), this);
+    m_saveButton = new QPushButton(tr("另存为…"), this);
+    m_deleteButton = new QPushButton(tr("删除"), this);
     buttons->addWidget(m_copyButton);
     buttons->addWidget(m_pinButton);
     buttons->addWidget(m_saveButton);
@@ -94,7 +94,7 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
     buttons->addWidget(m_status);
     buttons->addWidget(m_deleteButton);
 
-    auto* closeButton = new QPushButton(QStringLiteral("关闭"), this);
+    auto* closeButton = new QPushButton(tr("关闭"), this);
     buttons->addWidget(closeButton);
     layout->addLayout(buttons);
 
@@ -103,21 +103,21 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
         const QImage image = currentImage();
         if (!image.isNull()) {
             emit copyRequested(image);
-            m_status->setText(QStringLiteral("已复制"));
+            m_status->setText(tr("已复制"));
         }
     });
     connect(m_copyButton, &QPushButton::clicked, this, [this]() {
         const QImage image = currentImage();
         if (!image.isNull()) {
             emit copyRequested(image);
-            m_status->setText(QStringLiteral("已复制"));
+            m_status->setText(tr("已复制"));
         }
     });
     connect(m_pinButton, &QPushButton::clicked, this, [this]() {
         const QImage image = currentImage();
         if (!image.isNull()) {
             emit pinRequested(image);
-            m_status->setText(QStringLiteral("已贴图"));
+            m_status->setText(tr("已贴图"));
         }
     });
     connect(m_saveButton, &QPushButton::clicked, this, [this]() {
@@ -130,7 +130,7 @@ HistoryDialog::HistoryDialog(history::HistoryStore* store, QWidget* parent)
         const history::HistoryEntry entry = currentEntry();
         if (!entry.id.isEmpty() && m_store != nullptr) {
             m_store->remove(entry.id);
-            m_status->setText(QStringLiteral("已删除"));
+            m_status->setText(tr("已删除"));
         }
     });
     connect(closeButton, &QPushButton::clicked, this, &QDialog::close);

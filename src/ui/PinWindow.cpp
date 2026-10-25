@@ -236,18 +236,18 @@ void PinWindow::keyPressEvent(QKeyEvent* event)
 void PinWindow::contextMenuEvent(QContextMenuEvent* event)
 {
     QMenu menu(this);
-    QAction* ocrAction = menu.addAction(QStringLiteral("提取文字 (Ctrl+T)"));
-    QAction* editAction = menu.addAction(QStringLiteral("在编辑器中打开 (Ctrl+E)"));
+    QAction* ocrAction = menu.addAction(tr("提取文字 (Ctrl+T)"));
+    QAction* editAction = menu.addAction(tr("在编辑器中打开 (Ctrl+E)"));
     menu.addSeparator();
-    QAction* copyAction = menu.addAction(QStringLiteral("复制到剪贴板 (Ctrl+C)"));
-    QAction* saveAction = menu.addAction(QStringLiteral("保存 (Ctrl+S)"));
+    QAction* copyAction = menu.addAction(tr("复制到剪贴板 (Ctrl+C)"));
+    QAction* saveAction = menu.addAction(tr("保存 (Ctrl+S)"));
     menu.addSeparator();
-    QAction* zoomInAction = menu.addAction(QStringLiteral("放大"));
-    QAction* zoomOutAction = menu.addAction(QStringLiteral("缩小"));
-    QAction* rotateAction = menu.addAction(QStringLiteral("旋转 90° (R)"));
-    QAction* resetAction = menu.addAction(QStringLiteral("恢复 100%"));
+    QAction* zoomInAction = menu.addAction(tr("放大"));
+    QAction* zoomOutAction = menu.addAction(tr("缩小"));
+    QAction* rotateAction = menu.addAction(tr("旋转 90° (R)"));
+    QAction* resetAction = menu.addAction(tr("恢复 100%"));
     menu.addSeparator();
-    QAction* closeAction = menu.addAction(QStringLiteral("关闭 (Esc)"));
+    QAction* closeAction = menu.addAction(tr("关闭 (Esc)"));
 
     QAction* chosen = menu.exec(event->globalPos());
     if (chosen == nullptr) {
