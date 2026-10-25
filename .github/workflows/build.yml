@@ -69,10 +69,22 @@ jobs:
           Write-Host "packaged: dist/SnapOCR-$version-win64.zip"
           (Get-Item "dist/SnapOCR-$version-win64.zip").Length
 
+      - name: Build installer (Inno Setup)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw "choco install innosetup failed" }
+          cmd /c "scripts\installer.bat --skip-package"
+          if ($LASTEXITCODE -ne 0) { throw "installer build failed" }
+          Get-ChildItem dist/*.exe | Format-Table Name, Length
+
       - name: Upload package artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: SnapOCR-win64-package
-          path: dist/SnapOCR-*-win64.zip
+          path: |
+            dist/SnapOCR-*-win64.zip
+            dist/SnapOCR-*-setup.exe
           retention-days: 14

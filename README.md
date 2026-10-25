@@ -60,7 +60,12 @@ P1（贴图、历史、RapidOCR、放大镜、长截图…）与 P2（录屏、�
 
 ## 下载安装（绿色版）
 
-到 [Releases](https://github.com/poluce/SnapOCR/releases) 下载 `SnapOCR-<版本>-win64.zip`，解压到任意目录，双击 `SnapOCR.exe` 即可：
+到 [Releases](https://github.com/poluce/SnapOCR/releases) 下载：
+
+- **安装包**：`SnapOCR-<版本>-setup.exe`（按当前用户安装，无需管理员权限，可选桌面图标/开机自启）
+- **绿色包**：`SnapOCR-<版本>-win64.zip`（解压到任意目录，双击 `SnapOCR.exe` 即可）
+
+绿色包用法：
 
 - 免安装、免管理员权限、默认零联网；
 - 首次启动显示主窗口（截图 / 屏幕取字 / 设置三个入口），之后常驻托盘；按 `F1` 截图、`F4` 取字；
