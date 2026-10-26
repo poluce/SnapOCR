@@ -9,6 +9,7 @@
 #include <QTimer>
 
 #include <QGuiApplication>
+#include <QWindow>
 #include <QScreen>
 
 #include "capture/CaptureCrop.h"
@@ -223,8 +224,36 @@ void OverlayController::buildOverlays()
                 [this](const QColor& color) { emit colorPicked(color.name(QColor::HexRgb).toUpper()); });
         connect(window, &OverlayWindow::copyRequested, this, &OverlayController::requestCopy);
         connect(window, &OverlayWindow::cancelled, this, &OverlayController::cancel);
+        // 关键：混合 DPI 下必须先创建原生句柄、把窗口绑定到目标屏，再设置几何并显示，
+        // 否则 Qt 会把 top-level 窗口默认放到主屏（副屏截图“跑到主屏”的根因之一）。
+        const QRect targetGeometry = frame.monitor.logicalGeometry;
+        window->winId();  // 强制创建原生窗口
+        if (QWindow* handle = window->windowHandle()) {
+            QScreen* targetScreen = nullptr;
+            for (QScreen* screen : QGuiApplication::screens()) {
+                if (screen->geometry().intersects(targetGeometry)) {
+                    targetScreen = screen;
+                    break;
+                }
+            }
+            if (targetScreen != nullptr) {
+                handle->setScreen(targetScreen);
+            }
+        }
+        window->setGeometry(targetGeometry);
         window->show();
         window->raise();
+        // 显示后校正一次：Windows 上跨屏 DPR 变化会让 Qt 重新换算几何
+        QTimer::singleShot(0, window, [window, targetGeometry]() {
+            window->setGeometry(targetGeometry);
+            window->raise();
+        });
+        qInfo("overlay monitor=%s target=(%d,%d %dx%d) actual=(%d,%d %dx%d) screen=%s",
+              qUtf8Printable(frame.monitor.id), targetGeometry.x(), targetGeometry.y(),
+              targetGeometry.width(), targetGeometry.height(), window->geometry().x(),
+              window->geometry().y(), window->geometry().width(),
+              window->geometry().height(),
+              window->screen() != nullptr ? qUtf8Printable(window->screen()->name()) : "(null)");
         m_overlays.append(window);
     }
 }

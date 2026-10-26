@@ -145,6 +145,7 @@ constexpr auto kFlagDoctor = "--doctor";
 constexpr auto kFlagSelfTestAll = "--selftest-all";
 constexpr auto kFlagUiPreview = "--ui-preview";
 constexpr auto kFlagCheckUpdate = "--check-update";
+constexpr auto kFlagCaptureDump = "--capture-dump";
 constexpr auto kFlagUpdateFeed = "--update-feed";
 constexpr auto kFlagCrashSelfTest = "--crash-selftest";
 constexpr auto kFlagSettings = "--settings";
@@ -196,6 +197,11 @@ int Application::run(const QStringList& arguments)
     }
     if (args.contains(QString::fromLatin1(kFlagSelfTestAll))) {
         return runSelfTestAll();
+    }
+    if (args.contains(QString::fromLatin1(kFlagCaptureDump))) {
+        const int dumpIndex = args.indexOf(QString::fromLatin1(kFlagCaptureDump));
+        const QString dumpPath = (dumpIndex + 1 < args.size()) ? args.at(dumpIndex + 1) : QString();
+        return runCaptureDump(dumpPath);
     }
     if (args.contains(QString::fromLatin1(kFlagCheckUpdate))) {
         QString feed;
@@ -1113,6 +1119,89 @@ void Application::quitApplication()
     QApplication::quit();
 }
 
+int Application::runCaptureDump(const QString& filePath)
+{
+    QTextStream out(stdout);
+    out << "SnapOCR capture dump\n";
+    if (filePath.trimmed().isEmpty()) {
+        out << "FAIL: 缺少输出文件路径\n";
+        out.flush();
+        return EXIT_FAILURE;
+    }
+
+    capture::CaptureService service;
+    capture::CaptureResult result;
+    QString error;
+    QEventLoop loop;
+    QObject::connect(&service, &capture::CaptureService::captured, &loop,
+                     [&result, &loop](const capture::CaptureResult& captured) {
+                         result = captured;
+                         loop.quit();
+                     });
+    QObject::connect(&service, &capture::CaptureService::failed, &loop,
+                     [&error, &loop](const QString& message) {
+                         error = message;
+                         loop.quit();
+                     });
+    QTimer timer;
+    timer.setSingleShot(true);
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(10000);
+    service.captureAllScreens();
+    loop.exec();
+
+    if (!result.isValid()) {
+        out << "FAIL: " << (error.isEmpty() ? tr("捕获失败") : error) << '\n';
+        out.flush();
+        return EXIT_FAILURE;
+    }
+
+    // 拼成整个虚拟桌面（物理像素 1:1），便于检查窗口是否被包含
+    QImage combined(result.virtualGeometry.size(), QImage::Format_ARGB32);
+    combined.fill(Qt::black);
+    for (const capture::ScreenFrame& frame : result.screens) {
+        const QPoint offset = frame.monitor.physicalGeometry.topLeft()
+                              - result.virtualGeometry.topLeft();
+        QPainter painter(&combined);
+        painter.drawImage(offset, frame.image);
+    }
+    if (!combined.save(filePath, "PNG")) {
+        out << "FAIL: 无法写入 " << filePath << '\n';
+        out.flush();
+        return EXIT_FAILURE;
+    }
+    out << "  virtual : " << result.virtualGeometry.width() << 'x'
+        << result.virtualGeometry.height() << '\n';
+    out << "  screens : " << result.screens.size() << '\n';
+    for (const capture::ScreenFrame& frame : result.screens) {
+        out << "    - " << frame.monitor.id << " phys=(" << frame.monitor.physicalGeometry.x()
+            << ',' << frame.monitor.physicalGeometry.y() << ' '
+            << frame.monitor.physicalGeometry.width() << 'x'
+            << frame.monitor.physicalGeometry.height() << ") logical=("
+            << frame.monitor.logicalGeometry.x() << ',' << frame.monitor.logicalGeometry.y()
+            << ' ' << frame.monitor.logicalGeometry.width() << 'x'
+            << frame.monitor.logicalGeometry.height() << ") dpr=" << frame.monitor.devicePixelRatio
+            << " image=" << frame.image.width() << 'x' << frame.image.height() << '\n';
+    }
+    // 每块屏单独存一份：便于对照“哪块屏没抓到/抓错”
+    const QFileInfo fileInfo(filePath);
+    const QString baseName = fileInfo.completeBaseName();
+    const QString suffix = fileInfo.suffix().isEmpty() ? QStringLiteral("png") : fileInfo.suffix();
+    int index = 0;
+    for (const capture::ScreenFrame& frame : result.screens) {
+        const QString monitorPath =
+            fileInfo.dir().filePath(QStringLiteral("%1.m%2.%3").arg(baseName).arg(index).arg(suffix));
+        if (frame.image.save(monitorPath, "PNG")) {
+            out << "    saved monitor " << index << " : " << monitorPath << '\n';
+        }
+        ++index;
+    }
+    out << "  saved   : " << filePath << '\n';
+    out << "PASS\n";
+    out.flush();
+    return EXIT_SUCCESS;
+}
+
 int Application::runUpdateCheckCommand(const QString& feedUrl)
 {
     QTextStream out(stdout);
@@ -1744,6 +1833,12 @@ int Application::runDoctor()
 
     // ---- 显示器 ----
     const QVector<capture::MonitorInfo> monitors = capture::MonitorLayout::enumerate();
+    out << "  qtScreens    : " << QGuiApplication::screens().size() << '\n';
+    for (const QScreen* screen : QGuiApplication::screens()) {
+        out << "    - " << screen->name() << " geom=" << screen->geometry().x() << ','
+            << screen->geometry().y() << ' ' << screen->geometry().width() << 'x'
+            << screen->geometry().height() << " dpr=" << screen->devicePixelRatio() << '\n';
+    }
     out << "  monitors     : " << monitors.size() << '\n';
     for (int index = 0; index < monitors.size(); ++index) {
         const capture::MonitorInfo& monitor = monitors.at(index);

@@ -86,6 +86,8 @@ private:
     int runStabilitySelfTest();
     // 性能自检：捕获耗时 / OCR 端到端耗时 / 进程资源（阶段三 §8.2 验收）
     int runPerfSelfTest();
+    // 捕获转储（--capture-dump <文件>）：抓全屏并保存 PNG，用于排障/复现截图问题
+    int runCaptureDump(const QString& filePath);
     // 命令行更新检查（--check-update [--update-feed URL]）：脚本/排障用，打印结果
     int runUpdateCheckCommand(const QString& feedUrl);
     // 在线更新（F-SYS-16）：检查 → 提示 → 下载 → 安装 → 重启

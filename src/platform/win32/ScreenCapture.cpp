@@ -2,6 +2,7 @@
 
 #include <utility>
 
+#include <QDebug>
 #include <QElapsedTimer>
 #include <QImage>
 #include <QPoint>
@@ -82,6 +83,12 @@ bool ScreenCapture::captureAll(capture::CaptureResult* result, QString* errorMes
             continue;
         }
 
+        // 关键：副屏（尤其位于主屏左侧形成负坐标、或混合 DPI/旋转）不能用屏幕 DC
+        // 的虚拟坐标直接 BitBlt——它会静默返回成功但内容错位/为主屏内容。
+        // 正确做法：为每块显示器创建独立设备 DC（\\.\DISPLAYn），源坐标从 (0,0) 取。
+        const std::wstring deviceName = monitor.id.toStdWString();
+        HDC deviceDc = ::CreateDCW(deviceName.c_str(), nullptr, nullptr, nullptr);
+
         BITMAPINFO bitmapInfo{};
         bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         bitmapInfo.bmiHeader.biWidth = geometry.width();
@@ -102,19 +109,34 @@ bool ScreenCapture::captureAll(capture::CaptureResult* result, QString* errorMes
         }
 
         const HGDIOBJ previous = ::SelectObject(memoryDc, bitmap);
-        const BOOL copied = ::BitBlt(memoryDc,
-                                     0,
-                                     0,
-                                     geometry.width(),
-                                     geometry.height(),
-                                     screenDc,
-                                     geometry.x(),
-                                     geometry.y(),
-                                     SRCCOPY | CAPTUREBLT);
+        BOOL copied = FALSE;
+        if (deviceDc != nullptr) {
+            copied = ::BitBlt(memoryDc, 0, 0, geometry.width(), geometry.height(), deviceDc,
+                              0, 0, SRCCOPY | CAPTUREBLT);
+        }
+        if (copied == FALSE) {
+            // 回退：设备 DC 不可用时用屏幕 DC + 虚拟坐标（主屏、右侧副屏通常可用）
+            copied = ::BitBlt(memoryDc,
+                              0,
+                              0,
+                              geometry.width(),
+                              geometry.height(),
+                              screenDc,
+                              geometry.x(),
+                              geometry.y(),
+                              SRCCOPY | CAPTUREBLT);
+        }
         ::SelectObject(memoryDc, previous);
+        if (deviceDc != nullptr) {
+            ::DeleteDC(deviceDc);
+            deviceDc = nullptr;
+        }
 
         if (copied == FALSE) {
             lastError = QStringLiteral("BitBlt 失败：%1").arg(win32ErrorMessage(::GetLastError()));
+            qWarning("capture monitor %s failed: BitBlt (phys=(%d,%d %dx%d))",
+                     qUtf8Printable(monitor.id), geometry.x(), geometry.y(), geometry.width(),
+                     geometry.height());
             ::DeleteObject(bitmap);
             ::DeleteDC(memoryDc);
             continue;
@@ -128,6 +150,13 @@ bool ScreenCapture::captureAll(capture::CaptureResult* result, QString* errorMes
         capture::ScreenFrame frame;
         frame.monitor = monitor;
         frame.image = view.copy();  // 深拷贝，DIB 对象随后释放
+        qInfo("capture monitor %s phys=(%d,%d %dx%d) logical=(%d,%d %dx%d) dpr=%.2f image=%dx%d",
+              qUtf8Printable(monitor.id),
+              monitor.physicalGeometry.x(), monitor.physicalGeometry.y(),
+              monitor.physicalGeometry.width(), monitor.physicalGeometry.height(),
+              monitor.logicalGeometry.x(), monitor.logicalGeometry.y(),
+              monitor.logicalGeometry.width(), monitor.logicalGeometry.height(),
+              monitor.devicePixelRatio, frame.image.width(), frame.image.height());
 
         ::DeleteObject(bitmap);
         ::DeleteDC(memoryDc);
@@ -217,8 +246,28 @@ bool ScreenCapture::captureRegion(const QRect& physicalRect, QImage* image,
     }
 
     const HGDIOBJ previous = ::SelectObject(memoryDc, bitmap);
-    const BOOL copied = ::BitBlt(memoryDc, 0, 0, region.width(), region.height(), screenDc,
-                                 region.x(), region.y(), SRCCOPY | CAPTUREBLT);
+    BOOL copied = FALSE;
+    // 找到区域所在显示器，用其设备 DC + 局部坐标（避免副屏负坐标问题）
+    const QVector<capture::MonitorInfo> monitors = capture::MonitorLayout::enumerate();
+    for (const capture::MonitorInfo& monitor : monitors) {
+        const QRect physical = monitor.physicalGeometry;
+        if (!physical.contains(region)) {
+            continue;
+        }
+        const std::wstring deviceName = monitor.id.toStdWString();
+        HDC deviceDc = ::CreateDCW(deviceName.c_str(), nullptr, nullptr, nullptr);
+        if (deviceDc != nullptr) {
+            copied = ::BitBlt(memoryDc, 0, 0, region.width(), region.height(), deviceDc,
+                              region.x() - physical.x(), region.y() - physical.y(),
+                              SRCCOPY | CAPTUREBLT);
+            ::DeleteDC(deviceDc);
+        }
+        break;
+    }
+    if (copied == FALSE) {
+        copied = ::BitBlt(memoryDc, 0, 0, region.width(), region.height(), screenDc,
+                          region.x(), region.y(), SRCCOPY | CAPTUREBLT);
+    }
     ::SelectObject(memoryDc, previous);
 
     bool ok = false;
