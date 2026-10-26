@@ -378,7 +378,7 @@
     </message>
     <message>
         <source>关闭</source>
-        <translation>Close</translation>
+        <translation>Off</translation>
     </message>
     <message>
         <source>1 秒</source>

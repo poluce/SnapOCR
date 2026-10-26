@@ -5,6 +5,9 @@
 #include <QPalette>
 
 #include "ui/MainWindow.h"
+#include <QComboBox>
+#include <QLineEdit>
+#include "ui/SettingsPanel.h"
 #include "ui/Theme.h"
 
 using namespace snapocr::ui;
@@ -21,7 +24,38 @@ private slots:
     void styledReplacesTokens();
     void paletteFollowsTheme();
     void mainWindowRendersInBothThemes();
+    void darkThemeStylesInputs();
 };
+
+void ThemeTest::darkThemeStylesInputs()
+{
+    applyTheme(QStringLiteral("dark"));
+    SettingsPanel panel;
+    panel.resize(460, 700);
+    panel.show();
+    QApplication::processEvents();
+
+    const auto combos = panel.findChildren<QComboBox*>();
+    QVERIFY(!combos.isEmpty());
+    // 中心点取样：深色主题下 QComboBox 背景应偏暗
+    const QImage image = combos.first()->grab().toImage();
+    const QColor center = image.pixelColor(image.width() / 2, image.height() / 2);
+    qInfo() << "combo center color:" << center.name() << "lightness" << center.lightness();
+    QVERIFY2(center.lightness() < 128, qPrintable(QStringLiteral("combo stays light: %1")
+                                                      .arg(center.name())));
+
+    const auto edits = panel.findChildren<QLineEdit*>();
+    for (QLineEdit* edit : edits) {
+        if (edit->text().isEmpty()) {
+            continue;
+        }
+        const QImage editImage = edit->grab().toImage();
+        const QColor editCenter =
+            editImage.pixelColor(editImage.width() / 2, editImage.height() / 2);
+        QVERIFY2(editCenter.lightness() < 128,
+                 qPrintable(QStringLiteral("line edit stays light: %1").arg(editCenter.name())));
+    }
+}
 
 void ThemeTest::cleanup()
 {

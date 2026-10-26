@@ -160,9 +160,11 @@ if(WIN32)
                 # offscreen 插件是 CI/单测的默认平台；部署了 plugins 目录后 Qt 只在这里找，
                 # 必须一并带上，否则 smoke/offscreen 用例会弹窗挂起。
                 COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:SnapOCR>/platforms"
+                # Debug 构建必须用 qoffscreend.dll（release 插件与 debug Qt 不兼容，
+                # 加载失败会让 offscreen 冒烟测试弹窗挂起）。
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${_snapocr_qt_bin}/../plugins/platforms/qoffscreen.dll"
-                        "$<TARGET_FILE_DIR:SnapOCR>/platforms/qoffscreen.dll"
+                        "${_snapocr_qt_bin}/../plugins/platforms/qoffscreen$<$<CONFIG:Debug>:d>.dll"
+                        "$<TARGET_FILE_DIR:SnapOCR>/platforms/qoffscreen$<$<CONFIG:Debug>:d>.dll"
                 COMMENT "Deploying Qt runtime next to SnapOCR.exe"
                 VERBATIM)
         else()

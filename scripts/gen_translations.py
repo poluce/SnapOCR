@@ -29,6 +29,12 @@ CONTEXT_BY_FILE = {
     'Application.cpp': 'snapocr::app::Application',
 }
 
+# 同一中文在不同 context 下含义不同的，按 (context, source) 覆盖。
+CONTEXT_OVERRIDES = {
+    # 设置面板的「关闭」是"延时关闭/不延时"，不是对话框的 Close
+    ('snapocr::ui::SettingsPanel', '关闭'): 'Off',
+}
+
 TR_EN = {
     # MainWindow / Tray
     '截图': 'Capture', '屏幕取字': 'Grab Text', '截图历史': 'History', '就绪': 'Ready',
@@ -146,7 +152,7 @@ def main() -> int:
             if source in seen:
                 continue
             seen.add(source)
-            english = TR_EN.get(source)
+            english = CONTEXT_OVERRIDES.get((context, source), TR_EN.get(source))
             if english is None:
                 missing.append((context, source))
                 english = ''
