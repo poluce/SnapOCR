@@ -68,7 +68,7 @@ jobs:
           # 我们自己的界面翻译（snapocr_*.qm）也要打进发布包，否则英文 UI 不生效
           if (Test-Path "build/translations") {
             New-Item -ItemType Directory -Force -Path "$pkg/translations" | Out-Null
-            Copy-Item "build/translations/*.qm" "$pkg/translations/" -Force
+            Copy-Item "build/translations/snapocr_*.qm" "$pkg/translations/" -Force
           }
           tar -a -c -f "dist/SnapOCR-$version-win64.zip" -C dist "SnapOCR-$version"
           Write-Host "packaged: dist/SnapOCR-$version-win64.zip"

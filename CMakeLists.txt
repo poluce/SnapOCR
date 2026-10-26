@@ -156,6 +156,7 @@ if(WIN32)
                         --no-system-d3d-compiler
                         --no-quick-import
                         --no-compiler-runtime
+                        --no-translations
                         "$<TARGET_FILE:SnapOCR>"
                 # offscreen 插件是 CI/单测的默认平台；部署了 plugins 目录后 Qt 只在这里找，
                 # 必须一并带上，否则 smoke/offscreen 用例会弹窗挂起。
