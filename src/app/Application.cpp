@@ -19,6 +19,7 @@
 #include <QLoggingCategory>
 #include <QDebug>
 #include <QClipboard>
+#include <QDateTime>
 #include <QDir>
 #include <QGuiApplication>
 #include <QScreen>
@@ -146,6 +147,7 @@ constexpr auto kFlagSelfTestAll = "--selftest-all";
 constexpr auto kFlagUiPreview = "--ui-preview";
 constexpr auto kFlagCheckUpdate = "--check-update";
 constexpr auto kFlagCaptureDump = "--capture-dump";
+constexpr auto kFlagDiagnose = "--diagnose";
 constexpr auto kFlagUpdateFeed = "--update-feed";
 constexpr auto kFlagCrashSelfTest = "--crash-selftest";
 constexpr auto kFlagSettings = "--settings";
@@ -197,6 +199,14 @@ int Application::run(const QStringList& arguments)
     }
     if (args.contains(QString::fromLatin1(kFlagSelfTestAll))) {
         return runSelfTestAll();
+    }
+    if (args.contains(QString::fromLatin1(kFlagDiagnose))) {
+        const int diagnoseIndex = args.indexOf(QString::fromLatin1(kFlagDiagnose));
+        QString diagnoseDir;
+        if (diagnoseIndex + 1 < args.size() && !args.at(diagnoseIndex + 1).startsWith('-')) {
+            diagnoseDir = args.at(diagnoseIndex + 1);
+        }
+        return runDiagnose(diagnoseDir);
     }
     if (args.contains(QString::fromLatin1(kFlagCaptureDump))) {
         const int dumpIndex = args.indexOf(QString::fromLatin1(kFlagCaptureDump));
@@ -1119,14 +1129,14 @@ void Application::quitApplication()
     QApplication::quit();
 }
 
-int Application::runCaptureDump(const QString& filePath)
+bool Application::captureDumpTo(const QString& filePath, QTextStream& out)
 {
-    QTextStream out(stdout);
+
     out << "SnapOCR capture dump\n";
     if (filePath.trimmed().isEmpty()) {
         out << "FAIL: 缺少输出文件路径\n";
         out.flush();
-        return EXIT_FAILURE;
+        return false;
     }
 
     capture::CaptureService service;
@@ -1153,7 +1163,7 @@ int Application::runCaptureDump(const QString& filePath)
     if (!result.isValid()) {
         out << "FAIL: " << (error.isEmpty() ? tr("捕获失败") : error) << '\n';
         out.flush();
-        return EXIT_FAILURE;
+        return false;
     }
 
     // 拼成整个虚拟桌面（物理像素 1:1），便于检查窗口是否被包含
@@ -1168,7 +1178,7 @@ int Application::runCaptureDump(const QString& filePath)
     if (!combined.save(filePath, "PNG")) {
         out << "FAIL: 无法写入 " << filePath << '\n';
         out.flush();
-        return EXIT_FAILURE;
+        return false;
     }
     out << "  virtual : " << result.virtualGeometry.width() << 'x'
         << result.virtualGeometry.height() << '\n';
@@ -1199,7 +1209,67 @@ int Application::runCaptureDump(const QString& filePath)
     out << "  saved   : " << filePath << '\n';
     out << "PASS\n";
     out.flush();
-    return EXIT_SUCCESS;
+    return true;
+}
+
+int Application::runCaptureDump(const QString& filePath)
+{
+    QTextStream out(stdout);
+    const bool ok = captureDumpTo(filePath, out);
+    out.flush();
+    return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+int Application::runDiagnose(const QString& outputDirectory)
+{
+    QString directory = outputDirectory.trimmed();
+    if (directory.isEmpty()) {
+        directory = QDir(QCoreApplication::applicationDirPath())
+                        .filePath(QStringLiteral("diagnose-%1")
+                                      .arg(QDateTime::currentDateTime().toString(
+                                          QStringLiteral("yyyyMMdd-HHmmss"))));
+    }
+    if (!QDir().mkpath(directory)) {
+        QTextStream(stdout) << "FAIL: 无法创建诊断目录：" << directory << '\n';
+        return EXIT_FAILURE;
+    }
+
+    // 1) 环境/显示器报告
+    const QString doctorPath = QDir(directory).filePath(QStringLiteral("doctor.txt"));
+    {
+        QFile file(doctorPath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            QTextStream(stdout) << "FAIL: 无法写入 " << doctorPath << '\n';
+            return EXIT_FAILURE;
+        }
+        QTextStream out(&file);
+        out << buildDoctorReport();
+        out.flush();
+    }
+
+    // 2) 多屏捕获证据（整屏 + 每屏单独 PNG + 明细）
+    const QString dumpPath = QDir(directory).filePath(QStringLiteral("dump.png"));
+    const QString captureReportPath = QDir(directory).filePath(QStringLiteral("capture.txt"));
+    bool captureOk = false;
+    {
+        QFile file(captureReportPath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            QTextStream(stdout) << "FAIL: 无法写入 " << captureReportPath << '\n';
+            return EXIT_FAILURE;
+        }
+        QTextStream out(&file);
+        captureOk = captureDumpTo(dumpPath, out);
+        out.flush();
+    }
+
+    QTextStream out(stdout);
+    out << "SnapOCR diagnose\n";
+    out << "  directory : " << directory << '\n';
+    out << "  doctor    : " << doctorPath << '\n';
+    out << "  capture   : " << (captureOk ? "ok" : "FAILED") << " -> " << captureReportPath << '\n';
+    out << (captureOk ? "PASS\n" : "FAIL\n");
+    out.flush();
+    return captureOk ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 int Application::runUpdateCheckCommand(const QString& feedUrl)
@@ -1784,9 +1854,11 @@ int Application::runStabilitySelfTest()
     return EXIT_FAILURE;
 }
 
-int Application::runDoctor()
+QString Application::buildDoctorReport()
 {
-    QTextStream out(stdout);
+
+    QString report;
+    QTextStream out(&report);
     out << "SnapOCR doctor\n";
 
     // ---- 版本与系统 ----
@@ -1975,6 +2047,14 @@ int Application::runDoctor()
     }
 
     out << "PASS\n";
+    out.flush();
+    return report;
+}
+
+int Application::runDoctor()
+{
+    QTextStream out(stdout);
+    out << buildDoctorReport();
     out.flush();
     return EXIT_SUCCESS;
 }

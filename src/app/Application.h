@@ -88,6 +88,10 @@ private:
     int runPerfSelfTest();
     // 捕获转储（--capture-dump <文件>）：抓全屏并保存 PNG，用于排障/复现截图问题
     int runCaptureDump(const QString& filePath);
+    // 一键诊断（--diagnose [目录]）：doctor.txt + capture.txt + dump.png，避免命令行重定向问题
+    int runDiagnose(const QString& outputDirectory);
+    QString buildDoctorReport();
+    bool captureDumpTo(const QString& filePath, class QTextStream& out);
     // 命令行更新检查（--check-update [--update-feed URL]）：脚本/排障用，打印结果
     int runUpdateCheckCommand(const QString& feedUrl);
     // 在线更新（F-SYS-16）：检查 → 提示 → 下载 → 安装 → 重启
