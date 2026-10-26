@@ -69,6 +69,7 @@ jobs:
           if (Test-Path "build/translations") {
             New-Item -ItemType Directory -Force -Path "$pkg/translations" | Out-Null
             Copy-Item "build/translations/snapocr_*.qm" "$pkg/translations/" -Force
+            Copy-Item "scripts/diagnose.bat" "$pkg/diagnose.bat" -Force
           }
           tar -a -c -f "dist/SnapOCR-$version-win64.zip" -C dist "SnapOCR-$version"
           Write-Host "packaged: dist/SnapOCR-$version-win64.zip"

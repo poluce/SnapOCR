@@ -78,6 +78,7 @@ if errorlevel 1 (
 )
 
 if exist "%REPO_ROOT%\README.md" copy /y "%REPO_ROOT%\README.md" "%PKG_DIR%\README.md" >nul
+copy /y "%REPO_ROOT%\scripts\diagnose.bat" "%PKG_DIR%\diagnose.bat" >nul
 
 echo [INFO] Running windeployqt
 "%QTDIR%\bin\windeployqt.exe" --release --no-opengl-sw --no-system-d3d-compiler --no-quick-import ^
