@@ -124,7 +124,7 @@ ctest --test-dir build --output-on-failure
 聚合：SnapOCR.exe --selftest-all → PASS（4/4：smoke/capture/stability/perf）
 真机：scripts\e2e-smoke.ps1 → ALL PASS（F1 截图 801x601 / F4 OCR 已知文本 / Esc）
 注：构建后 build/ 已自包含 Qt（windeployqt POST_BUILD），无需 PATH 即可运行
-CLI：SnapOCR.exe --version → SnapOCR 0.2.0；--check-update 检查更新（可用 --update-feed 指定源）
+CLI：SnapOCR.exe --version → SnapOCR 0.2.0；--check-update 检查更新（仓库已公开，默认源可用；可用 --update-feed 指定源）
 发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2 / v0.2.0
      （CI 打包绿色包 + Inno Setup 安装包，sha256 校验 + 独立运行验证）
 ```
