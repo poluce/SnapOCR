@@ -28,6 +28,8 @@
 #include <QFileInfo>
 #include "capture/MonitorLayout.h"
 #include <QStringList>
+#include <functional>
+
 #include <QTextStream>
 #include <QTimer>
 
@@ -131,6 +133,7 @@ constexpr auto kFlagCaptureSelfTest = "--capture-selftest";
 constexpr auto kFlagStabilitySelfTest = "--stability-selftest";
 constexpr auto kFlagPerfSelfTest = "--perf-selftest";
 constexpr auto kFlagDoctor = "--doctor";
+constexpr auto kFlagSelfTestAll = "--selftest-all";
 constexpr auto kFlagCrashSelfTest = "--crash-selftest";
 constexpr auto kFlagSettings = "--settings";
 
@@ -178,6 +181,9 @@ int Application::run(const QStringList& arguments)
     }
     if (args.contains(QString::fromLatin1(kFlagDoctor))) {
         return runDoctor();
+    }
+    if (args.contains(QString::fromLatin1(kFlagSelfTestAll))) {
+        return runSelfTestAll();
     }
     if (args.contains(QString::fromLatin1(kFlagCrashSelfTest))) {
         // 崩溃记录自检：安装记录器后主动触发访问冲突，进程应写出 crash-*.txt
@@ -1094,6 +1100,52 @@ void Application::showError(const QString& message)
     if (m_mainWindow != nullptr) {
         m_mainWindow->setStatusText(message);
     }
+}
+
+int Application::runSelfTestAll()
+{
+    QTextStream out(stdout);
+    out << "SnapOCR selftest-all\n";
+    out << "====================\n";
+    out.flush();
+
+    struct StageResult
+    {
+        QString name;
+        int code = EXIT_FAILURE;
+    };
+    QVector<StageResult> stages;
+
+    const auto runStage = [&out, &stages](const QString& name, const std::function<int()>& fn) {
+        out << "\n--- " << name << " ---\n";
+        out.flush();
+        const int code = fn();
+        stages.append({name, code});
+        out << (code == EXIT_SUCCESS ? "[OK] " : "[FAIL] ") << name << "\n";
+        out.flush();
+    };
+
+    runStage(QStringLiteral("smoke"),
+             [this]() { return runSmokeTest(); });
+    runStage(QStringLiteral("capture"),
+             [this]() { return runCaptureSelfTest(); });
+    runStage(QStringLiteral("stability(20 rounds)"),
+             [this]() { return runStabilitySelfTest(); });
+    runStage(QStringLiteral("perf"),
+             [this]() { return runPerfSelfTest(); });
+
+    int failed = 0;
+    out << "\n====================\n";
+    for (const StageResult& stage : stages) {
+        out << (stage.code == EXIT_SUCCESS ? "PASS  " : "FAIL  ") << stage.name << '\n';
+        if (stage.code != EXIT_SUCCESS) {
+            ++failed;
+        }
+    }
+    out << "SUMMARY: " << (stages.size() - failed) << '/' << stages.size() << " passed\n";
+    out << (failed == 0 ? "PASS\n" : "FAIL\n");
+    out.flush();
+    return failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 int Application::runSmokeTest()

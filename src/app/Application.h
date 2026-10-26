@@ -81,6 +81,8 @@ private:
     int runPerfSelfTest();
     // 环境诊断（排障用）：系统/DPI/显示器/OCR 语言/运行库/剪贴板/热键/路径
     int runDoctor();
+    // 聚合自检：依次跑冒烟/捕获/稳定性/性能，末尾给汇总结论
+    int runSelfTestAll();
     void printVersion() const;
     void printHelp() const;
 
