@@ -137,6 +137,40 @@ if(TARGET snapocr_translations)
     )
 endif()
 
+
+# ---------------------------------------------------------------------------
+# 开发构建自包含部署：把 Qt 运行库/插件部署到 exe 同级目录。
+# 目的：直接运行 build\SnapOCR.exe 时不再依赖 PATH（否则可能误加载系统里
+# 其他 Qt 版本，出现「无法定位程序输入点」弹窗）。发布打包仍由
+# scripts\package.bat 独立执行 windeployqt。
+# ---------------------------------------------------------------------------
+if(WIN32)
+    get_target_property(_snapocr_qmake Qt6::qmake IMPORTED_LOCATION)
+    if(_snapocr_qmake)
+        get_filename_component(_snapocr_qt_bin "${_snapocr_qmake}" DIRECTORY)
+        find_program(SNAPCOR_WINDEPLOYQT windeployqt HINTS "${_snapocr_qt_bin}" NO_CACHE)
+        if(SNAPCOR_WINDEPLOYQT)
+            add_custom_command(TARGET SnapOCR POST_BUILD
+                COMMAND "${SNAPCOR_WINDEPLOYQT}"
+                        --no-opengl-sw
+                        --no-system-d3d-compiler
+                        --no-quick-import
+                        --no-compiler-runtime
+                        "$<TARGET_FILE:SnapOCR>"
+                # offscreen 插件是 CI/单测的默认平台；部署了 plugins 目录后 Qt 只在这里找，
+                # 必须一并带上，否则 smoke/offscreen 用例会弹窗挂起。
+                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:SnapOCR>/platforms"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_snapocr_qt_bin}/../plugins/platforms/qoffscreen.dll"
+                        "$<TARGET_FILE_DIR:SnapOCR>/platforms/qoffscreen.dll"
+                COMMENT "Deploying Qt runtime next to SnapOCR.exe"
+                VERBATIM)
+        else()
+            message(WARNING "windeployqt not found; build/SnapOCR.exe will need Qt on PATH")
+        endif()
+    endif()
+endif()
+
 target_link_libraries(SnapOCR PRIVATE snapocr_core)
 snapocr_set_common_options(SnapOCR)
 

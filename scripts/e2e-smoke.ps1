@@ -125,6 +125,21 @@ function Stop-App {
 Stop-App
 try { [System.Windows.Forms.Clipboard]::Clear() } catch { }
 
+# Temporarily disable window detection during the test; otherwise a click selects
+# the window under the cursor and the selection size becomes unpredictable.
+# The user's settings are restored after the app exits.
+$iniPath = Join-Path $env:LOCALAPPDATA 'poluce\SnapOCR\SnapOCR.ini'
+$iniBackup = $null
+$iniOriginal = $null
+if (Test-Path $iniPath) {
+    $iniBackup = "$iniPath.e2e-backup"
+    Copy-Item $iniPath $iniBackup -Force
+    $iniOriginal = Get-Content -Raw -Encoding UTF8 $iniPath
+    $patched = $iniOriginal -replace '(?m)^detectWindows=.*$', 'detectWindows=false'
+    if ($patched -notmatch '(?m)^detectWindows=') { $patched = $patched -replace '(?m)^(\[capture\])', "`$1`r`ndetectWindows=false" }
+    Set-Content -Path $iniPath -Value $patched -Encoding UTF8 -NoNewline
+}
+
 Write-Host "=== SnapOCR e2e smoke (build dir: $BuildDir) ==="
 $app = Start-Process -FilePath $exe -ArgumentList @('--tray') -PassThru
 Start-Sleep -Seconds 3
@@ -167,16 +182,41 @@ if ($hasImage) {
 }
 
 # ---- 2. OCR -> text ----
+# Use a deterministic on-screen text target instead of whatever happens to be on the
+# desktop: a borderless topmost form with known text, so the assertion is stable.
+$ocrText = 'SnapOCR E2E OCR 12345'
+$ocrForm = New-Object System.Windows.Forms.Form
+$ocrForm.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+$ocrForm.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+$ocrForm.Bounds = New-Object System.Drawing.Rectangle(200, 200, 900, 300)
+$ocrForm.TopMost = $true
+$ocrForm.BackColor = [System.Drawing.Color]::White
+$label = New-Object System.Windows.Forms.Label
+$label.Text = $ocrText
+$label.Font = New-Object System.Drawing.Font('Segoe UI', 36, [System.Drawing.FontStyle]::Bold)
+$label.AutoSize = $false
+$label.Dock = [System.Windows.Forms.DockStyle]::Fill
+$label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$ocrForm.Controls.Add($label)
+$ocrForm.Show()
+$ocrForm.Activate()
+[System.Windows.Forms.Application]::DoEvents()
+Start-Sleep -Milliseconds 900
+
 try { [System.Windows.Forms.Clipboard]::Clear() } catch { }
 Invoke-Hotkey $threadId $HOTKEY_OCR
 Start-Sleep -Milliseconds $DelayAfterHotkeyMs
-Invoke-Drag 600 500 1400 1000
+Invoke-Drag 220 220 1080 480
 Start-Sleep -Milliseconds 3000
+$ocrForm.Close()
+$ocrForm.Dispose()
 
 $text = ''
 try { if ([System.Windows.Forms.Clipboard]::ContainsText()) { $text = [System.Windows.Forms.Clipboard]::GetText() } } catch { }
-if ($text.Length -gt 0) {
-    Pass "F4 -> selection -> OCR copied $($text.Length) characters"
+if ($text -like '*SnapOCR*' -or $text -like '*12345*') {
+    Pass "F4 -> selection -> OCR copied known text ($($text.Length) characters)"
+} elseif ($text.Length -gt 0) {
+    Fail "OCR text mismatch (got $($text.Length) chars: $($text.Substring(0, [Math]::Min(40, $text.Length))))"
 } else {
     Fail "OCR flow produced no clipboard text"
 }
@@ -200,6 +240,12 @@ if ((Get-Process -Name SnapOCR -ErrorAction SilentlyContinue | Measure-Object).C
     Pass "app closed"
 } else {
     Fail "app still running after close"
+}
+
+# Restore the user's settings
+if ($null -ne $iniBackup -and (Test-Path $iniBackup)) {
+    Copy-Item $iniBackup $iniPath -Force
+    Remove-Item $iniBackup -Force
 }
 
 if ($script:failures -eq 0) {

@@ -120,6 +120,8 @@ ctest --test-dir build --output-on-failure
       区域裁剪 2ms / OCR 91ms / 空闲工作集 28MB）
 冒烟：SnapOCR.exe --smoke-test → platform=windows, PASS, exit 0
 聚合：SnapOCR.exe --selftest-all → PASS（4/4：smoke/capture/stability/perf）
+真机：scripts\e2e-smoke.ps1 → ALL PASS（F1 截图 801x601 / F4 OCR 已知文本 / Esc）
+注：构建后 build/ 已自包含 Qt（windeployqt POST_BUILD），无需 PATH 即可运行
 CLI：SnapOCR.exe --version → SnapOCR 1.0.0
 发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2 / v1.0.0-rc.1
      （CI 打包绿色包 + Inno Setup 安装包，sha256 校验 + 独立运行验证）
