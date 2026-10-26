@@ -5,7 +5,7 @@
 ## 项目是什么
 
 **SnapOCR**：Windows 10/11 上的轻量截图 + 标注 + OCR 工具（C++20 / Qt 6.11 Widgets / MSVC / CMake + Ninja）。
-当前阶段：**阶段二已完成并发布**（v0.1.0），**阶段三进行中**（最新正式版 v0.2.0：
+当前阶段：**阶段二已完成并发布**（v0.1.0），**阶段三进行中**（最新正式版 v0.2.1：
 主题一致性、稳定性审计、发布工程（含 Inno Setup 安装包）、性能验收、i18n 119 条、
 拖拽导出、贴图取字/再标注、在线更新（检查→下载→安装→重启））；
 多屏矩阵/IM 剪贴板/干净机器列为已知限制；
@@ -111,7 +111,7 @@ ctest --test-dir build --output-on-failure
 
 完成任何任务前，确认：构建通过、相关测试通过、文档同步、无敏感信息写入日志。
 
-## 当前验收基线（阶段三 / v0.2.0）
+## 当前验收基线（阶段三 / v0.2.1）
 
 ```text
 构建：MSVC 19.51 + Qt 6.11.1，/W4 零告警，全量编译通过
@@ -124,7 +124,7 @@ ctest --test-dir build --output-on-failure
 聚合：SnapOCR.exe --selftest-all → PASS（4/4：smoke/capture/stability/perf）
 真机：scripts\e2e-smoke.ps1 → ALL PASS（F1 截图 801x601 / F4 OCR 已知文本 / Esc）
 注：构建后 build/ 已自包含 Qt（windeployqt POST_BUILD），无需 PATH 即可运行
-CLI：SnapOCR.exe --version → SnapOCR 0.2.0；--check-update 检查更新（仓库已公开，默认源可用；可用 --update-feed 指定源）
-发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2 / v0.2.0
+CLI：SnapOCR.exe --version → SnapOCR 0.2.1；--check-update 检查更新（仓库已公开，默认源可用；可用 --update-feed 指定源）
+发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2 / v0.2.0 / v0.2.1
      （CI 打包绿色包 + Inno Setup 安装包，sha256 校验 + 独立运行验证）
 ```

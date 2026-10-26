@@ -35,6 +35,7 @@ SnapOCR 的开发文档统一为**四份**，按“需求 → 设计 → 开发 
 | v0.1.0 | 阶段二：延时/光标/取色/窗口识别/长截图/历史/贴图/标注与 OCR 增强 | [docs/releases/v0.1.0.md](releases/v0.1.0.md) · [Release](https://github.com/poluce/SnapOCR/releases/tag/v0.1.0) |
 | v0.1.1 | 补丁版：拖拽导出、i18n 骨架、长截图/贴图缺陷修复、需求追溯与边界测试 | [docs/releases/v0.1.1.md](releases/v0.1.1.md) |
 | v0.1.2 | 补丁版：贴图取字/再标注、英文翻译 119 条、发布包翻译修复 | [docs/releases/v0.1.2.md](releases/v0.1.2.md) |
+| v0.2.1 | 在线更新（检查→提示→下载→安装→重启）+ 发布包瘦身/稳定性自检加固；仓库已公开 | [docs/releases/v0.2.1.md](releases/v0.2.1.md) · [Release](https://github.com/poluce/SnapOCR/releases/tag/v0.2.1) |
 | v0.2.0 | 阶段二/三功能版：贴图取字与再标注、拖拽导出、i18n 119 条、安装包；多屏/IM/干净机器列为已知限制 | [docs/releases/v0.2.0.md](releases/v0.2.0.md) · [Release](https://github.com/poluce/SnapOCR/releases/tag/v0.2.0) |
 
 ## 资源
