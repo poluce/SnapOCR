@@ -1312,6 +1312,7 @@ int Application::runDoctor()
                                              : settings.saveDirectory)
         << " format=" << settings.saveFormat << '\n';
     out << "  logs         : " << common::defaultLogDirectory() << '\n';
+    out << "  history      : " << history::HistoryStore::defaultHistoryDirectory() << '\n';
 
     // ---- OCR 语言 ----
     {
