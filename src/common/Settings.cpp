@@ -380,6 +380,17 @@ AppSettings SettingsStore::load(QString* warning) const
     settings.nameTemplate = readTextValue(
         ini, QStringLiteral("save/nameTemplate"), settings.nameTemplate, false, &issues);
 
+    // update（F-SYS-16）
+    settings.updateCheckEnabled =
+        readBoolValue(ini, QStringLiteral("update/checkEnabled"), settings.updateCheckEnabled,
+                      &issues);
+    // feedUrl 为空表示使用内置更新源；skippedVersion 为空表示未跳过——都属合法空值
+    settings.updateFeedUrl =
+        readTextValue(ini, QStringLiteral("update/feedUrl"), settings.updateFeedUrl, true, &issues);
+    settings.skippedUpdateVersion =
+        readTextValue(ini, QStringLiteral("update/skippedVersion"), settings.skippedUpdateVersion,
+                      true, &issues);
+
     // advanced
     settings.logLevel =
         readEnumValue(ini,
@@ -445,6 +456,10 @@ bool SettingsStore::save(const AppSettings& settings, QString* error) const
     ini.setValue(QStringLiteral("save/format"), normalizedImageFormat(settings.saveFormat));
     ini.setValue(QStringLiteral("save/jpgQuality"), settings.jpgQuality);
     ini.setValue(QStringLiteral("save/nameTemplate"), settings.nameTemplate);
+
+    ini.setValue(QStringLiteral("update/checkEnabled"), settings.updateCheckEnabled);
+    ini.setValue(QStringLiteral("update/feedUrl"), settings.updateFeedUrl);
+    ini.setValue(QStringLiteral("update/skippedVersion"), settings.skippedUpdateVersion);
 
     ini.setValue(QStringLiteral("advanced/logLevel"), settings.logLevel);
 

@@ -7,7 +7,8 @@
 **SnapOCR**：Windows 10/11 上的轻量截图 + 标注 + OCR 工具（C++20 / Qt 6.11 Widgets / MSVC / CMake + Ninja）。
 当前阶段：**阶段二已完成并发布**（v0.1.0），**阶段三进行中**（最新正式版 v0.2.0：
 主题一致性、稳定性审计、发布工程（含 Inno Setup 安装包）、性能验收、i18n 119 条、
-拖拽导出、贴图取字/再标注）；多屏矩阵/IM 剪贴板/干净机器列为已知限制；
+拖拽导出、贴图取字/再标注、在线更新（检查→下载→安装→重启））；
+多屏矩阵/IM 剪贴板/干净机器列为已知限制；
 状态以 [完成情况](docs/04-完成情况.md) 为准。
 
 - 文档索引与维护规则：`docs/README.md`
@@ -65,7 +66,8 @@ main.cpp
 
 ## 硬性约束
 
-- **默认零联网、无遥测**；不引入后台网络请求（P2 功能需显式设计且默认关闭）。
+- **默认零联网、无遥测**；唯一联网功能是在线更新检查（F-SYS-16，默认开启、可在设置关闭），
+  不得新增其他后台网络请求（P2 功能需显式设计）。
 - 不申请管理员权限；不装全局键盘钩子；不注入其他进程。
 - 日志禁止记录 OCR 原文/剪贴板内容/用户截图路径中的敏感信息。
 - 截图/导出一律按屏幕物理像素 1:1，禁止经过缩放或控件截图导出。
@@ -113,8 +115,8 @@ ctest --test-dir build --output-on-failure
 
 ```text
 构建：MSVC 19.51 + Qt 6.11.1，/W4 零告警，全量编译通过
-测试：ctest 37/37 passed（含坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/
-      主题/历史/贴图/长截图/窗口识别/覆盖层主链路/编辑窗/i18n/资源度量/冒烟/UI 预览）
+测试：ctest 39/39 passed（含坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/
+      主题/历史/贴图/长截图/窗口识别/覆盖层主链路/编辑窗/i18n/资源度量/冒烟/UI 预览/更新解析与更新检查）
 稳定性：SnapOCR.exe --stability-selftest → 20 轮 PASS（GDI 零增长）
 性能：SnapOCR.exe --perf-selftest → PASS（热键→遮罩 67ms / 4K 捕获 57ms /
       区域裁剪 2ms / OCR 91ms / 空闲工作集 28MB）
@@ -122,7 +124,7 @@ ctest --test-dir build --output-on-failure
 聚合：SnapOCR.exe --selftest-all → PASS（4/4：smoke/capture/stability/perf）
 真机：scripts\e2e-smoke.ps1 → ALL PASS（F1 截图 801x601 / F4 OCR 已知文本 / Esc）
 注：构建后 build/ 已自包含 Qt（windeployqt POST_BUILD），无需 PATH 即可运行
-CLI：SnapOCR.exe --version → SnapOCR 0.2.0
+CLI：SnapOCR.exe --version → SnapOCR 0.2.0；--check-update 检查更新（可用 --update-feed 指定源）
 发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2 / v0.2.0
      （CI 打包绿色包 + Inno Setup 安装包，sha256 校验 + 独立运行验证）
 ```

@@ -16,6 +16,8 @@
 #include <QVector>
 #include "ocr/OcrTypes.h"
 
+class QNetworkAccessManager;
+
 namespace snapocr::ui {
 class MainWindow;
 class PinWindow;
@@ -29,6 +31,11 @@ class AnnotationDocument;
 
 namespace snapocr::editor {
 class EditorWindow;
+}
+
+namespace snapocr::update {
+class UpdateChecker;
+struct UpdateRelease;
 }
 
 namespace snapocr::overlay {
@@ -79,6 +86,14 @@ private:
     int runStabilitySelfTest();
     // 性能自检：捕获耗时 / OCR 端到端耗时 / 进程资源（阶段三 §8.2 验收）
     int runPerfSelfTest();
+    // 命令行更新检查（--check-update [--update-feed URL]）：脚本/排障用，打印结果
+    int runUpdateCheckCommand(const QString& feedUrl);
+    // 在线更新（F-SYS-16）：检查 → 提示 → 下载 → 安装 → 重启
+    void checkForUpdates(bool interactive);
+    void promptForUpdate(const snapocr::update::UpdateRelease& release);
+    void startUpdateDownload(const snapocr::update::UpdateRelease& release);
+    void installAndRestart(const QString& setupPath);
+
     // 环境诊断（排障用）：系统/DPI/显示器/OCR 语言/运行库/剪贴板/热键/路径
     int runDoctor();
     // 聚合自检：依次跑冒烟/捕获/稳定性/性能，末尾给汇总结论
@@ -133,6 +148,10 @@ private:
     SingleInstance* m_singleInstance = nullptr;
     overlay::OverlayController* m_overlayController = nullptr;
     ocr::OcrService* m_ocrService = nullptr;
+    update::UpdateChecker* m_updateChecker = nullptr;
+    QNetworkAccessManager* m_updateNetwork = nullptr;
+    bool m_updateCheckInteractive = false;
+    bool m_updateDownloading = false;
 
     std::unique_ptr<ui::MainWindow> m_mainWindow;
     QPointer<ui::OcrResultDialog> m_ocrDialog;

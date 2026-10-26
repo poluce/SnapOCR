@@ -43,6 +43,14 @@ struct AppSettings
     int jpgQuality = 90;
     QString nameTemplate = QStringLiteral("SnapOCR_yyyyMMdd_HHmmss");
 
+    // 更新（F-SYS-16）
+    // 启动后检查新版本；默认开启，可在设置中关闭（关闭后完全不联网）
+    bool updateCheckEnabled = true;
+    // 更新源；空 = 内置 GitHub Releases API（或设置自定义 manifest URL）
+    QString updateFeedUrl;
+    // 用户选择「跳过此版本」时记录，避免反复提示
+    QString skippedUpdateVersion;
+
     // 高级
     QString logLevel = QStringLiteral("info");
 };

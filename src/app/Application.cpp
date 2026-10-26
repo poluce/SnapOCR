@@ -55,6 +55,14 @@
 #include "history/HistoryStore.h"
 #include "editor/AnnotationCanvas.h"
 #include <QPixmap>
+#include "update/UpdateChecker.h"
+#include "ui/UpdateDialog.h"
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QProgressDialog>
+#include <QDesktopServices>
+#include <QProcess>
 #include "editor/EditorWindow.h"
 #include "i18n/Translator.h"
 #include "ui/HistoryDialog.h"
@@ -136,6 +144,8 @@ constexpr auto kFlagPerfSelfTest = "--perf-selftest";
 constexpr auto kFlagDoctor = "--doctor";
 constexpr auto kFlagSelfTestAll = "--selftest-all";
 constexpr auto kFlagUiPreview = "--ui-preview";
+constexpr auto kFlagCheckUpdate = "--check-update";
+constexpr auto kFlagUpdateFeed = "--update-feed";
 constexpr auto kFlagCrashSelfTest = "--crash-selftest";
 constexpr auto kFlagSettings = "--settings";
 
@@ -186,6 +196,14 @@ int Application::run(const QStringList& arguments)
     }
     if (args.contains(QString::fromLatin1(kFlagSelfTestAll))) {
         return runSelfTestAll();
+    }
+    if (args.contains(QString::fromLatin1(kFlagCheckUpdate))) {
+        QString feed;
+        const int feedIndex = args.indexOf(QString::fromLatin1(kFlagUpdateFeed));
+        if (feedIndex >= 0 && feedIndex + 1 < args.size()) {
+            feed = args.at(feedIndex + 1);
+        }
+        return runUpdateCheckCommand(feed);
     }
     if (args.contains(QString::fromLatin1(kFlagUiPreview))) {
         const int index = args.indexOf(QString::fromLatin1(kFlagUiPreview));
@@ -273,7 +291,14 @@ bool Application::initializeServices()
     connect(m_tray, &TrayController::settingsRequested, this, &Application::showSettings);
     connect(m_tray, &TrayController::showMainRequested, this, &Application::showMainWindow);
     connect(m_tray, &TrayController::quitRequested, this, &Application::quitApplication);
+    connect(m_tray, &TrayController::updateCheckRequested, this,
+            [this]() { checkForUpdates(true); });
     m_tray->show();
+
+    // 在线更新（F-SYS-16）：启动后延迟几秒检查一次，避免影响启动速度与截图热键
+    if (m_settings.updateCheckEnabled) {
+        QTimer::singleShot(5000, this, [this]() { checkForUpdates(false); });
+    }
 
     m_overlayController = new overlay::OverlayController(this);
     connect(m_overlayController, &overlay::OverlayController::copyRequested, this,
@@ -1086,6 +1111,259 @@ void Application::quitApplication()
         m_tray->hide();
     }
     QApplication::quit();
+}
+
+int Application::runUpdateCheckCommand(const QString& feedUrl)
+{
+    QTextStream out(stdout);
+    out << "SnapOCR update check\n";
+
+    update::UpdateChecker checker;
+    checker.setCurrentVersion(QString::fromUtf8(version::kVersion));
+    checker.setFeedUrl(feedUrl.trimmed().isEmpty()
+                           ? update::UpdateChecker::defaultFeedUrl()
+                           : QUrl(feedUrl.trimmed()));
+    out << "  current      : " << QString::fromUtf8(version::kVersion) << '\n';
+    out << "  feed         : " << checker.feedUrl().toString() << '\n';
+    out.flush();
+
+    QEventLoop loop;
+    bool ok = false;
+    bool newer = false;
+    update::UpdateRelease release;
+    QString error;
+    connect(&checker, &update::UpdateChecker::finished, &loop,
+            [&ok, &newer, &release, &error, &loop](bool success,
+                                                  const update::UpdateRelease& found,
+                                                  bool hasNewer, const QString& message) {
+                ok = success;
+                newer = hasNewer;
+                release = found;
+                error = message;
+                loop.quit();
+            });
+    checker.checkAsync();
+    QTimer timer;
+    timer.setSingleShot(true);
+    connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(update::UpdateChecker::kDefaultTimeoutMs + 5000);
+    loop.exec();
+
+    if (!ok) {
+        out << "FAIL: " << (error.isEmpty() ? tr("检查更新超时") : error) << '\n';
+        out.flush();
+        return EXIT_FAILURE;
+    }
+    out << "  latest       : " << release.version << '\n';
+    out << "  installer    : "
+        << (release.hasInstaller() ? release.setupUrl.toString() : QStringLiteral("(none)"))
+        << '\n';
+    out << "  notes        : " << release.notes.left(200).replace('\n', QStringLiteral(" ")) << '\n';
+    out << (newer ? "UPDATE_AVAILABLE\n" : "UP_TO_DATE\n");
+    out.flush();
+    return EXIT_SUCCESS;
+}
+
+void Application::checkForUpdates(bool interactive)
+{
+    m_updateCheckInteractive = interactive;
+    if (m_updateChecker == nullptr) {
+        m_updateChecker = new update::UpdateChecker(this);
+        connect(m_updateChecker, &update::UpdateChecker::finished, this,
+                [this](bool ok, const update::UpdateRelease& release, bool newerAvailable,
+                       const QString& errorMessage) {
+                    if (!ok) {
+                        if (m_updateCheckInteractive) {
+                            showError(tr("检查更新失败：%1").arg(errorMessage));
+                        } else {
+                            qInfo("update check failed: %s", qUtf8Printable(errorMessage));
+                        }
+                        return;
+                    }
+                    if (!newerAvailable) {
+                        if (m_updateCheckInteractive) {
+                            showInfo(tr("已是最新版本（%1）")
+                                         .arg(QString::fromUtf8(version::kVersion)));
+                        }
+                        return;
+                    }
+                    if (release.version == m_settings.skippedUpdateVersion) {
+                        qInfo("update %s skipped by user", qUtf8Printable(release.version));
+                        if (m_updateCheckInteractive) {
+                            showInfo(tr("已跳过 v%1，可在托盘菜单重新检查")
+                                         .arg(release.version));
+                        }
+                        return;
+                    }
+                    qInfo("update available: %s", qUtf8Printable(release.version));
+                    promptForUpdate(release);
+                });
+    }
+    m_updateChecker->setCurrentVersion(QString::fromUtf8(version::kVersion));
+    m_updateChecker->setFeedUrl(m_settings.updateFeedUrl.trimmed().isEmpty()
+                                    ? update::UpdateChecker::defaultFeedUrl()
+                                    : QUrl(m_settings.updateFeedUrl.trimmed()));
+    if (m_updateChecker->isChecking()) {
+        return;
+    }
+    if (interactive) {
+        showInfo(tr("正在检查更新…"));
+    }
+    m_updateChecker->checkAsync();
+}
+
+void Application::promptForUpdate(const update::UpdateRelease& release)
+{
+    if (m_tray != nullptr && m_tray->isAvailable()) {
+        m_tray->showMessage(QStringLiteral("SnapOCR"),
+                            tr("发现新版本 %1，点击托盘菜单「检查更新」查看").arg(release.version));
+    }
+
+    ui::UpdateDialog dialog(release, QString::fromUtf8(version::kVersion));
+    dialog.exec();
+    switch (dialog.choice()) {
+    case ui::UpdateDialog::Choice::DownloadAndInstall:
+        startUpdateDownload(release);
+        break;
+    case ui::UpdateDialog::Choice::SkipVersion:
+        m_settings.skippedUpdateVersion = release.version;
+        if (m_settingsStore != nullptr) {
+            m_settingsStore->save(m_settings, nullptr);
+        }
+        showInfo(tr("已跳过 v%1").arg(release.version));
+        break;
+    case ui::UpdateDialog::Choice::RemindLater:
+        break;
+    }
+}
+
+void Application::startUpdateDownload(const update::UpdateRelease& release)
+{
+    if (m_updateDownloading) {
+        return;
+    }
+    if (!release.hasInstaller()) {
+        // 没有安装包时退化为打开发布页，由用户选择下载方式
+        const QUrl target = release.htmlUrl.isEmpty()
+                                ? QUrl(QStringLiteral("https://github.com/poluce/SnapOCR/releases"))
+                                : QUrl(release.htmlUrl);
+        QDesktopServices::openUrl(target);
+        showInfo(tr("已在浏览器打开下载页面"));
+        return;
+    }
+
+    if (m_updateNetwork == nullptr) {
+        m_updateNetwork = new QNetworkAccessManager(this);
+    }
+    const QString directory =
+        QDir(QDir::tempPath()).filePath(QStringLiteral("SnapOCR-update"));
+    QDir().mkpath(directory);
+    QString fileName = release.setupName;
+    if (fileName.isEmpty()) {
+        fileName = QStringLiteral("SnapOCR-%1-setup.exe").arg(release.version);
+    }
+    const QString targetPath = QDir(directory).filePath(fileName);
+
+    m_updateDownloading = true;
+    auto* progress = new QProgressDialog(tr("正在下载更新 %1…").arg(release.version),
+                                         tr("取消"), 0, 100, nullptr);
+    progress->setWindowTitle(tr("下载更新"));
+    progress->setWindowModality(Qt::ApplicationModal);
+    progress->setAutoClose(false);
+    progress->setAutoReset(false);
+    progress->setMinimumDuration(0);
+    progress->setValue(0);
+
+    QNetworkRequest request(release.setupUrl);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(120000);
+    QNetworkReply* reply = m_updateNetwork->get(request);
+
+    connect(reply, &QNetworkReply::downloadProgress, progress,
+            [progress](qint64 received, qint64 total) {
+                if (total > 0) {
+                    progress->setValue(static_cast<int>(received * 100 / total));
+                }
+            });
+    connect(progress, &QProgressDialog::canceled, reply, &QNetworkReply::abort);
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, progress, targetPath, fileName, release]() {
+                progress->close();
+                progress->deleteLater();
+                m_updateDownloading = false;
+                const QByteArray data = reply->readAll();
+                const int status =
+                    reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                const QString networkError = reply->errorString();
+                const bool aborted = reply->error() == QNetworkReply::OperationCanceledError;
+                reply->deleteLater();
+
+                if (aborted) {
+                    showInfo(tr("已取消下载更新"));
+                    return;
+                }
+                if (reply->error() != QNetworkReply::NoError || status >= 400 || data.isEmpty()) {
+                    showError(tr("下载更新失败：%1").arg(networkError));
+                    return;
+                }
+                if (release.setupSize > 0 && data.size() != release.setupSize) {
+                    showError(tr("下载文件大小不符（期望 %1 字节，实际 %2 字节），已丢弃")
+                                  .arg(release.setupSize)
+                                  .arg(data.size()));
+                    return;
+                }
+                QFile file(targetPath);
+                if (!file.open(QIODevice::WriteOnly)) {
+                    showError(tr("无法写入更新文件：%1").arg(targetPath));
+                    return;
+                }
+                file.write(data);
+                file.close();
+                qInfo("update downloaded: %s (%lld bytes)", qUtf8Printable(fileName),
+                      static_cast<long long>(data.size()));
+
+                const auto answer = QMessageBox::question(
+                    nullptr, tr("安装更新"),
+                    tr("更新已下载完成。安装过程会关闭 SnapOCR，安装完成后自动重启。\n是否立即安装？"),
+                    QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+                if (answer != QMessageBox::Yes) {
+                    showInfo(tr("更新已下载，可稍后手动安装：%1").arg(targetPath));
+                    return;
+                }
+                installAndRestart(targetPath);
+            });
+}
+
+void Application::installAndRestart(const QString& setupPath)
+{
+    const QString installDirectory = QCoreApplication::applicationDirPath();
+    const QString restartScript =
+        QDir(QDir::tempPath()).filePath(QStringLiteral("SnapOCR-update-restart.bat"));
+    QFile script(restartScript);
+    if (!script.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        showError(tr("无法创建更新脚本：%1").arg(restartScript));
+        return;
+    }
+    const QString content =
+        QStringLiteral("@echo off\r\n"
+                       "timeout /t 3 /nobreak >nul\r\n"
+                       "\"%1\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS "
+                       "/DIR=\"%2\"\r\n"
+                       "start \"\" \"%2\\SnapOCR.exe\" --tray\r\n"
+                       "del \"%~f0\"\r\n")
+            .arg(QDir::toNativeSeparators(setupPath), QDir::toNativeSeparators(installDirectory));
+    script.write(content.toUtf8());
+    script.close();
+
+    showInfo(tr("正在安装更新，安装完成后会自动重启"));
+    const bool started = QProcess::startDetached(QStringLiteral("cmd.exe"),
+                                                 {QStringLiteral("/c"), restartScript});
+    if (!started) {
+        showError(tr("无法启动安装程序，请手动运行：%1").arg(setupPath));
+        return;
+    }
+    QTimer::singleShot(300, qApp, &QCoreApplication::quit);
 }
 
 void Application::showInfo(const QString& message)

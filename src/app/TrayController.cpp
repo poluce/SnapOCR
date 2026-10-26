@@ -24,6 +24,7 @@ TrayController::TrayController(QObject* parent)
     m_menu->addSeparator();
     QAction* showAction = m_menu->addAction(tr("打开主窗口"));
     QAction* settingsAction = m_menu->addAction(tr("设置"));
+    QAction* updateAction = m_menu->addAction(tr("检查更新"));
     m_menu->addSeparator();
     QAction* quitAction = m_menu->addAction(tr("退出"));
 
@@ -33,6 +34,7 @@ TrayController::TrayController(QObject* parent)
     connect(pinLatestAction, &QAction::triggered, this, &TrayController::pinLatestRequested);
     connect(showAction, &QAction::triggered, this, &TrayController::showMainRequested);
     connect(settingsAction, &QAction::triggered, this, &TrayController::settingsRequested);
+    connect(updateAction, &QAction::triggered, this, &TrayController::updateCheckRequested);
     connect(quitAction, &QAction::triggered, this, &TrayController::quitRequested);
 
     setHotkeyTexts(QStringLiteral("F1"), QStringLiteral("F4"));

@@ -58,6 +58,8 @@ private:
     ToggleSwitch* m_includeCursor = nullptr;
     ToggleSwitch* m_pinOnCopy = nullptr;
     ToggleSwitch* m_detectWindows = nullptr;
+    ToggleSwitch* m_updateCheck = nullptr;
+    QLineEdit* m_updateFeed = nullptr;
     QComboBox* m_language = nullptr;
     bool m_loading = false;
 };

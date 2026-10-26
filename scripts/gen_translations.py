@@ -17,6 +17,19 @@ import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
+CONTEXT_BY_CLASS = {
+    'MainWindow': 'snapocr::ui::MainWindow',
+    'TitleBar': 'snapocr::ui::TitleBar',
+    'SettingsPanel': 'snapocr::ui::SettingsPanel',
+    'HistoryDialog': 'snapocr::ui::HistoryDialog',
+    'OcrResultDialog': 'snapocr::ui::OcrResultDialog',
+    'PinWindow': 'snapocr::ui::PinWindow',
+    'ScrollingBar': 'snapocr::ui::ScrollingBar',
+    'UpdateDialog': 'snapocr::ui::UpdateDialog',
+    'Application': 'snapocr::app::Application',
+    'TrayController': 'snapocr::app::TrayController',
+}
+
 CONTEXT_BY_FILE = {
     'SettingsPanel.cpp': 'snapocr::ui::SettingsPanel',
     'HistoryDialog.cpp': 'snapocr::ui::HistoryDialog',
@@ -25,6 +38,7 @@ CONTEXT_BY_FILE = {
     'PinWindow.cpp': 'snapocr::ui::PinWindow',
     'MainWindow.cpp': 'snapocr::ui::MainWindow',
     'TitleBar.cpp': 'snapocr::ui::TitleBar',
+    'UpdateDialog.cpp': 'snapocr::ui::UpdateDialog',
     'TrayController.cpp': 'snapocr::app::TrayController',
     'Application.cpp': 'snapocr::app::Application',
 }
@@ -86,6 +100,47 @@ TR_EN = {
     '信息': 'Info', '调试': 'Debug', '日志级别': 'Log level',
     # TitleBar
     '最小化': 'Minimize',
+    # Update（F-SYS-16）
+    '启动时检查更新': 'Check for updates on startup',
+    '更新源': 'Update feed',
+    '留空使用 GitHub Releases（私有仓库可填自定义 manifest）':
+        'Leave empty for GitHub Releases (or a custom manifest URL)',
+    '检查更新': 'Check for Updates',
+    '发现新版本': 'Update Available',
+    'SnapOCR %1 可用': 'SnapOCR %1 is available',
+    '当前版本 %1 → 新版本 %2': 'Current version %1 -> new version %2',
+    '安装包大小：%1 MB': 'Installer size: %1 MB',
+    '安装包大小：未知': 'Installer size: unknown',
+    '更新说明': 'Release notes',
+    '（该版本没有附带更新说明）': '(No release notes provided)',
+    '跳过此版本': 'Skip this version',
+    '稍后提醒': 'Remind me later',
+    '下载并安装': 'Download and install',
+    '正在检查更新…': 'Checking for updates…',
+    '检查更新失败：%1': 'Update check failed: %1',
+    '已是最新版本（%1）': 'Already up to date (%1)',
+    '已跳过 v%1，可在托盘菜单重新检查': 'Skipped v%1; you can re-check from the tray menu',
+    '发现新版本 %1，点击托盘菜单「检查更新」查看':
+        'New version %1 available. Use "Check for Updates" in the tray menu.',
+    '已跳过 v%1': 'Skipped v%1',
+    '检查更新超时': 'Update check timed out',
+    '已在浏览器打开下载页面': 'Opened the download page in your browser',
+    '正在下载更新 %1…': 'Downloading update %1…',
+    '下载更新': 'Download Update',
+    '已取消下载更新': 'Update download cancelled',
+    '下载更新失败：%1': 'Update download failed: %1',
+    '下载文件大小不符（期望 %1 字节，实际 %2 字节），已丢弃':
+        'Downloaded file size mismatch (expected %1 bytes, got %2); discarded',
+    '无法写入更新文件：%1': 'Failed to write update file: %1',
+    '安装更新': 'Install Update',
+    '更新已下载完成。安装过程会关闭 SnapOCR，安装完成后自动重启。\n是否立即安装？':
+        'The update has been downloaded. SnapOCR will close during installation and restart automatically afterwards. Install now?',
+    '更新已下载，可稍后手动安装：%1': 'Update downloaded; you can install it later: %1',
+    '无法创建更新脚本：%1': 'Failed to create the update script: %1',
+    '正在安装更新，安装完成后会自动重启':
+        'Installing update; SnapOCR will restart automatically',
+    '无法启动安装程序，请手动运行：%1': 'Failed to start the installer; please run it manually: %1',
+
     # Application（状态/错误/气泡提示）
     '已复制颜色 %1': 'Copied color %1', '复制颜色失败：%1': 'Failed to copy color: %1',
     '%1，已临时改用 F1。可在设置中更换截图热键。':
@@ -133,13 +188,32 @@ def main() -> int:
     root = ET.parse(path).getroot()
 
     groups = defaultdict(list)
+    unknown_files = set()
     for context in root.findall('context'):
+        # lupdate 自己解析出的类名最可靠（如 "TitleBar"）；"unknown"/空 再退回 location
+        raw_name = (context.findtext('name') or '').strip()
+        mapped_context = CONTEXT_BY_CLASS.get(raw_name)
         for message in context.findall('message'):
-            locations = message.findall('location')
-            filename = locations[0].get('filename') if locations else ''
-            base = filename.replace('\\', '/').rsplit('/', 1)[-1]
-            groups[CONTEXT_BY_FILE.get(base, base or 'unknown')].append(
-                message.find('source').text)
+            source = message.findtext('source') or ''
+            if mapped_context is not None:
+                groups[mapped_context].append(source)
+                continue
+            # 同一源文可能来自多个文件（lupdate 会合并 location），
+            # 必须按「所有 location」把文案放进每个类的 context。
+            basenames = set()
+            for location in message.findall('location'):
+                filename = (location.get('filename') or '').replace('\\', '/')
+                base = filename.rsplit('/', 1)[-1]
+                if base:
+                    basenames.add(base)
+            for base in basenames or {''}:
+                context_name = CONTEXT_BY_FILE.get(base)
+                if context_name is None:
+                    unknown_files.add(base or '(no location)')
+                    context_name = base or 'unknown'
+                groups[context_name].append(source)
+    if unknown_files:
+        print('WARN: 未登记 context 映射的文件:', ', '.join(sorted(unknown_files)))
 
     missing = []
     lines = ['<?xml version="1.0" encoding="utf-8"?>', '<!DOCTYPE TS>',

@@ -31,6 +31,7 @@ signals:
     void ocrRequested();
     void historyRequested();
     void pinLatestRequested();
+    void updateCheckRequested();
     void settingsRequested();
     void showMainRequested();
     void quitRequested();

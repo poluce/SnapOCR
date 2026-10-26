@@ -91,6 +91,15 @@ void SettingsPanel::buildUi()
     connect(m_detectWindows, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
     root->addWidget(makeSeparator());
     root->addWidget(makeToggleRow(tr("窗口识别"), m_detectWindows));
+
+    m_updateCheck = new ToggleSwitch(this);
+    connect(m_updateCheck, &QAbstractButton::toggled, this, &SettingsPanel::emitChanged);
+    root->addWidget(makeSeparator());
+    root->addWidget(makeToggleRow(tr("启动时检查更新"), m_updateCheck));
+    m_updateFeed = new QLineEdit(this);
+    m_updateFeed->setPlaceholderText(tr("留空使用 GitHub Releases（私有仓库可填自定义 manifest）"));
+    connect(m_updateFeed, &QLineEdit::editingFinished, this, &SettingsPanel::emitChanged);
+    root->addWidget(makeRow(tr("更新源"), m_updateFeed));
     root->addWidget(makeGroupGap());
 
     // ---- 保存 ----
@@ -338,6 +347,8 @@ void SettingsPanel::setSettings(const common::AppSettings& settings)
     m_language->setCurrentIndex(languageIndex < 0 ? 0 : languageIndex);
 
     m_detectWindows->setChecked(settings.detectWindows);
+    m_updateCheck->setChecked(settings.updateCheckEnabled);
+    m_updateFeed->setText(settings.updateFeedUrl);
     m_detectWindows->setKnobPosition(settings.detectWindows ? 1.0 : 0.0);
 
     m_includeCursor->setChecked(settings.includeCursor);
@@ -376,6 +387,8 @@ common::AppSettings SettingsPanel::settings() const
     result.delaySeconds = m_delaySeconds->currentData().toInt();
     result.includeCursor = m_includeCursor->isChecked();
     result.detectWindows = m_detectWindows->isChecked();
+    result.updateCheckEnabled = m_updateCheck->isChecked();
+    result.updateFeedUrl = m_updateFeed->text().trimmed();
     result.language = m_language->currentData().toString();
     result.pinOnCopy = m_pinOnCopy->isChecked();
     result.startWithWindows = m_autoStart->isChecked();

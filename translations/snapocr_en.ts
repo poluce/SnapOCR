@@ -136,6 +136,91 @@
         <translation>Failed to save settings: %1</translation>
     </message>
     <message>
+        <source>检查更新超时</source>
+        <translation>Update check timed out</translation>
+    </message>
+    <message>
+        <source>检查更新失败：%1</source>
+        <translation>Update check failed: %1</translation>
+    </message>
+    <message>
+        <source>已是最新版本（%1）</source>
+        <translation>Already up to date (%1)</translation>
+    </message>
+    <message>
+        <source>已跳过 v%1，可在托盘菜单重新检查</source>
+        <translation>Skipped v%1; you can re-check from the tray menu</translation>
+    </message>
+    <message>
+        <source>正在检查更新…</source>
+        <translation>Checking for updates…</translation>
+    </message>
+    <message>
+        <source>发现新版本 %1，点击托盘菜单「检查更新」查看</source>
+        <translation>New version %1 available. Use "Check for Updates" in the tray menu.</translation>
+    </message>
+    <message>
+        <source>已跳过 v%1</source>
+        <translation>Skipped v%1</translation>
+    </message>
+    <message>
+        <source>已在浏览器打开下载页面</source>
+        <translation>Opened the download page in your browser</translation>
+    </message>
+    <message>
+        <source>正在下载更新 %1…</source>
+        <translation>Downloading update %1…</translation>
+    </message>
+    <message>
+        <source>取消</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <source>下载更新</source>
+        <translation>Download Update</translation>
+    </message>
+    <message>
+        <source>已取消下载更新</source>
+        <translation>Update download cancelled</translation>
+    </message>
+    <message>
+        <source>下载更新失败：%1</source>
+        <translation>Update download failed: %1</translation>
+    </message>
+    <message>
+        <source>下载文件大小不符（期望 %1 字节，实际 %2 字节），已丢弃</source>
+        <translation>Downloaded file size mismatch (expected %1 bytes, got %2); discarded</translation>
+    </message>
+    <message>
+        <source>无法写入更新文件：%1</source>
+        <translation>Failed to write update file: %1</translation>
+    </message>
+    <message>
+        <source>安装更新</source>
+        <translation>Install Update</translation>
+    </message>
+    <message>
+        <source>更新已下载完成。安装过程会关闭 SnapOCR，安装完成后自动重启。
+是否立即安装？</source>
+        <translation>The update has been downloaded. SnapOCR will close during installation and restart automatically afterwards. Install now?</translation>
+    </message>
+    <message>
+        <source>更新已下载，可稍后手动安装：%1</source>
+        <translation>Update downloaded; you can install it later: %1</translation>
+    </message>
+    <message>
+        <source>无法创建更新脚本：%1</source>
+        <translation>Failed to create the update script: %1</translation>
+    </message>
+    <message>
+        <source>正在安装更新，安装完成后会自动重启</source>
+        <translation>Installing update; SnapOCR will restart automatically</translation>
+    </message>
+    <message>
+        <source>无法启动安装程序，请手动运行：%1</source>
+        <translation>Failed to start the installer; please run it manually: %1</translation>
+    </message>
+    <message>
         <source>捕获失败</source>
         <translation>Capture failed</translation>
     </message>
@@ -165,6 +250,10 @@
     <message>
         <source>设置</source>
         <translation>Settings</translation>
+    </message>
+    <message>
+        <source>检查更新</source>
+        <translation>Check for Updates</translation>
     </message>
     <message>
         <source>退出</source>
@@ -421,6 +510,18 @@
         <translation>Window detection</translation>
     </message>
     <message>
+        <source>启动时检查更新</source>
+        <translation>Check for updates on startup</translation>
+    </message>
+    <message>
+        <source>留空使用 GitHub Releases（私有仓库可填自定义 manifest）</source>
+        <translation>Leave empty for GitHub Releases (or a custom manifest URL)</translation>
+    </message>
+    <message>
+        <source>更新源</source>
+        <translation>Update feed</translation>
+    </message>
+    <message>
         <source>留空则使用 图片\SnapOCR</source>
         <translation>Empty = Pictures\SnapOCR</translation>
     </message>
@@ -502,6 +603,49 @@
     <message>
         <source>关闭</source>
         <translation>Close</translation>
+    </message>
+</context>
+<context>
+    <name>snapocr::ui::UpdateDialog</name>
+    <message>
+        <source>发现新版本</source>
+        <translation>Update Available</translation>
+    </message>
+    <message>
+        <source>SnapOCR %1 可用</source>
+        <translation>SnapOCR %1 is available</translation>
+    </message>
+    <message>
+        <source>当前版本 %1 → 新版本 %2</source>
+        <translation>Current version %1 -> new version %2</translation>
+    </message>
+    <message>
+        <source>安装包大小：%1 MB</source>
+        <translation>Installer size: %1 MB</translation>
+    </message>
+    <message>
+        <source>安装包大小：未知</source>
+        <translation>Installer size: unknown</translation>
+    </message>
+    <message>
+        <source>更新说明</source>
+        <translation>Release notes</translation>
+    </message>
+    <message>
+        <source>（该版本没有附带更新说明）</source>
+        <translation>(No release notes provided)</translation>
+    </message>
+    <message>
+        <source>跳过此版本</source>
+        <translation>Skip this version</translation>
+    </message>
+    <message>
+        <source>稍后提醒</source>
+        <translation>Remind me later</translation>
+    </message>
+    <message>
+        <source>下载并安装</source>
+        <translation>Download and install</translation>
     </message>
 </context>
 </TS>
