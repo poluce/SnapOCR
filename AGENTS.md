@@ -113,8 +113,8 @@ ctest --test-dir build --output-on-failure
 
 ```text
 构建：MSVC 19.51 + Qt 6.11.1，/W4 零告警，全量编译通过
-测试：ctest 35/35 passed（含坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/
-      主题/历史/贴图/长截图/窗口识别/覆盖层主链路/i18n/资源度量/冒烟）
+测试：ctest 36/36 passed（含坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/
+      主题/历史/贴图/长截图/窗口识别/覆盖层主链路/编辑窗/i18n/资源度量/冒烟）
 稳定性：SnapOCR.exe --stability-selftest → 20 轮 PASS（GDI 零增长）
 性能：SnapOCR.exe --perf-selftest → PASS（热键→遮罩 67ms / 4K 捕获 57ms /
       区域裁剪 2ms / OCR 91ms / 空闲工作集 28MB）

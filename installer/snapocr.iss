@@ -64,4 +64,23 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--tray"; Tasks: startupicon
 
 [Run]
+; 干净机器缺 MSVC 运行库时自动安装包内的 vc_redist（会触发一次 UAC 授权，
+; 因为运行库是系统级组件）。本机已有运行库时这一步自动跳过。
+Filename: "{app}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "正在安装 Microsoft Visual C++ 运行库…"; Flags: runhidden waituntilterminated; Check: ShouldInstallVCRedist
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+{ 缺少任意一个 MSVC 运行库 DLL 即认为需要安装（Win10/11 干净系统常见） }
+function VCRuntimeMissing(): Boolean;
+begin
+  Result := False;
+  if not FileExists(ExpandConstant('{sys}\vcruntime140.dll')) then Result := True;
+  if not FileExists(ExpandConstant('{sys}\vcruntime140_1.dll')) then Result := True;
+  if not FileExists(ExpandConstant('{sys}\msvcp140.dll')) then Result := True;
+end;
+
+function ShouldInstallVCRedist(): Boolean;
+begin
+  Result := VCRuntimeMissing()
+            and FileExists(ExpandConstant('{app}\vc_redist.x64.exe'));
+end;
