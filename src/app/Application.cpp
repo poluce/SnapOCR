@@ -54,6 +54,7 @@
 #include "snapocr/Version.h"
 #include "history/HistoryStore.h"
 #include "editor/AnnotationCanvas.h"
+#include <QPixmap>
 #include "editor/EditorWindow.h"
 #include "i18n/Translator.h"
 #include "ui/HistoryDialog.h"
@@ -134,6 +135,7 @@ constexpr auto kFlagStabilitySelfTest = "--stability-selftest";
 constexpr auto kFlagPerfSelfTest = "--perf-selftest";
 constexpr auto kFlagDoctor = "--doctor";
 constexpr auto kFlagSelfTestAll = "--selftest-all";
+constexpr auto kFlagUiPreview = "--ui-preview";
 constexpr auto kFlagCrashSelfTest = "--crash-selftest";
 constexpr auto kFlagSettings = "--settings";
 
@@ -184,6 +186,11 @@ int Application::run(const QStringList& arguments)
     }
     if (args.contains(QString::fromLatin1(kFlagSelfTestAll))) {
         return runSelfTestAll();
+    }
+    if (args.contains(QString::fromLatin1(kFlagUiPreview))) {
+        const int index = args.indexOf(QString::fromLatin1(kFlagUiPreview));
+        const QString output = (index + 1 < args.size()) ? args.at(index + 1) : QString();
+        return runUiPreview(output);
     }
     if (args.contains(QString::fromLatin1(kFlagCrashSelfTest))) {
         // 崩溃记录自检：安装记录器后主动触发访问冲突，进程应写出 crash-*.txt
@@ -1100,6 +1107,130 @@ void Application::showError(const QString& message)
     if (m_mainWindow != nullptr) {
         m_mainWindow->setStatusText(message);
     }
+}
+
+int Application::runUiPreview(const QString& outputDirectory)
+{
+    QTextStream out(stdout);
+    out << "SnapOCR ui preview\n";
+
+    QString directory = outputDirectory.trimmed();
+    if (directory.isEmpty()) {
+        out << "FAIL: 缺少输出目录（用法：SnapOCR.exe --ui-preview <目录>）\n";
+        out.flush();
+        return EXIT_FAILURE;
+    }
+    if (!QDir().mkpath(directory)) {
+        out << "FAIL: 无法创建目录：" << directory << '\n';
+        out.flush();
+        return EXIT_FAILURE;
+    }
+
+    const auto save = [&out, &directory](QWidget* widget, const QString& name, int width,
+                                         int height) {
+        if (widget == nullptr) {
+            return;
+        }
+        widget->resize(width, height);
+        widget->show();
+        QApplication::processEvents();
+        const QPixmap pixmap = widget->grab();
+        const QString path = QDir(directory).filePath(name + QStringLiteral(".png"));
+        if (pixmap.save(path, "PNG")) {
+            out << "  saved " << name << ".png (" << pixmap.width() << 'x' << pixmap.height()
+                << ")\n";
+        } else {
+            out << "  WARN failed to save " << name << '\n';
+        }
+        widget->close();
+    };
+
+    // 造几张合成截图，供历史窗/贴图/OCR 结果窗使用
+    QImage sample(960, 600, QImage::Format_ARGB32);
+    sample.fill(QColor(0xF4, 0xF7, 0xFB));
+    {
+        QPainter painter(&sample);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        QFont font(QStringLiteral("Microsoft YaHei"));
+        font.setPixelSize(30);
+        painter.setFont(font);
+        painter.setPen(QColor(0x1F, 0x23, 0x28));
+        painter.drawText(QRect(40, 40, 880, 60), Qt::AlignLeft | Qt::AlignVCenter,
+                         QStringLiteral("SnapOCR UI 预览"));
+        font.setPixelSize(22);
+        painter.setFont(font);
+        painter.setPen(QColor(0x5A, 0x62, 0x6B));
+        for (int line = 0; line < 6; ++line) {
+            painter.drawText(QRect(40, 140 + line * 56, 880, 48),
+                             Qt::AlignLeft | Qt::AlignVCenter,
+                             QStringLiteral("第 %1 行示例文本 · SnapOCR preview line %2")
+                                 .arg(line + 1)
+                                 .arg(line + 1));
+        }
+    }
+
+    // ---- 浅色主题 ----
+    ui::applyTheme(QStringLiteral("light"));
+    save(new ui::MainWindow, QStringLiteral("main-light"), 560, 920);
+
+    {
+        ui::OcrResultDialog dialog;
+        ocr::OcrResult result;
+        result.ok = true;
+        result.languageTag = QStringLiteral("zh-Hans-CN");
+        result.fullText = QStringLiteral("SnapOCR 离线取字示例。\n第二行文本用于预览。");
+        result.cleanText = result.fullText;
+        result.elapsedMs = 128;
+        ocr::OcrLine line;
+        line.text = QStringLiteral("SnapOCR 离线取字示例。");
+        result.lines.append(line);
+        line.text = QStringLiteral("第二行文本用于预览。");
+        result.lines.append(line);
+        dialog.setResult(result);
+        save(&dialog, QStringLiteral("ocr-result"), 720, 520);
+    }
+
+    {
+        ui::PinWindow pin(sample);
+        save(&pin, QStringLiteral("pin"), 480, 340);
+    }
+    save(new ui::ScrollingBar, QStringLiteral("scrolling-bar"), 380, 96);
+
+    {
+        // 历史窗：用临时目录造 3 条记录
+        const QString tempHistory =
+            QDir(QDir::tempPath()).filePath(QStringLiteral("snapocr-uipreview-history"));
+        QDir(tempHistory).removeRecursively();
+        QDir().mkpath(tempHistory);
+        history::HistoryStore store;
+        store.setDirectory(tempHistory);
+        for (int index = 0; index < 3; ++index) {
+            QImage image = sample.copy(0, 0, 960, 600);
+            QPainter marker(&image);
+            marker.fillRect(0, 0, 960, 8, QColor(0x2F, 0x6F, 0xEB));
+            marker.end();
+            store.add(image);
+        }
+        ui::HistoryDialog dialog(&store);
+        save(&dialog, QStringLiteral("history"), 780, 560);
+        QDir(tempHistory).removeRecursively();
+    }
+
+    // ---- 深色主题 ----
+    ui::applyTheme(QStringLiteral("dark"));
+    save(new ui::MainWindow, QStringLiteral("main-dark"), 560, 920);
+
+    // ---- 英文界面 ----
+    ui::applyTheme(QStringLiteral("light"));
+    i18n::installUiTranslator(qobject_cast<QApplication*>(QApplication::instance()),
+                              QStringLiteral("en-US"));
+    save(new ui::MainWindow, QStringLiteral("main-english"), 560, 920);
+    i18n::installUiTranslator(qobject_cast<QApplication*>(QApplication::instance()),
+                              QStringLiteral("zh-CN"));
+
+    out << "PASS\n";
+    out.flush();
+    return EXIT_SUCCESS;
 }
 
 int Application::runSelfTestAll()

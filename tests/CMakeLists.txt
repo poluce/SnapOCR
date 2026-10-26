@@ -35,3 +35,9 @@ endif()
 # 冒烟测试：真实启动一次应用（offscreen 平台，CI 无桌面也能跑）
 add_test(NAME snapocr_smoke COMMAND SnapOCR --smoke-test)
 set_tests_properties(snapocr_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# UI 预览生成（离屏渲染各窗口到 PNG）：既是文档工具，也作为视觉渲染冒烟
+add_test(NAME snapocr_ui_preview
+         COMMAND SnapOCR --ui-preview "${CMAKE_CURRENT_BINARY_DIR}/ui-preview")
+set_tests_properties(snapocr_ui_preview PROPERTIES ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QT_QPA_FONTDIR=C:/Windows/Fonts")

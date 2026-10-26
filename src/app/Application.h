@@ -83,6 +83,8 @@ private:
     int runDoctor();
     // 聚合自检：依次跑冒烟/捕获/稳定性/性能，末尾给汇总结论
     int runSelfTestAll();
+    // UI 预览：离屏渲染各窗口到 PNG（文档/视觉回归用，需 QT_QPA_PLATFORM=offscreen）
+    int runUiPreview(const QString& outputDirectory);
     void printVersion() const;
     void printHelp() const;
 
