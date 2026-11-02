@@ -27,6 +27,7 @@
 #include <QStandardPaths>
 #include <QSysInfo>
 #include <QFileInfo>
+#include "capture/CoordinateMap.h"
 #include "capture/MonitorLayout.h"
 #include <QStringList>
 #include <functional>
@@ -81,24 +82,16 @@ namespace snapocr::app {
 
 namespace {
 
-// 把虚拟桌面物理矩形换算成 Qt 逻辑矩形（逐屏匹配 DPR）。
+// 把虚拟桌面物理矩形换算成 Qt 逻辑矩形。
+// 注意：不能按 logical×dpr 反推物理原点——混合 DPI 下副屏物理原点不是
+// 逻辑原点乘以 DPR（如主屏 125%、副屏 100% 并排在右），必须用逐屏真实几何换算。
 QRect physicalRectToLogical(const QRect& physical)
 {
-    for (const QScreen* screen : QGuiApplication::screens()) {
-        const QRect logical = screen->geometry();
-        const qreal dpr = screen->devicePixelRatio();
-        const QRect physicalGeometry(
-            QPoint(qRound(logical.x() * dpr), qRound(logical.y() * dpr)),
-            QSize(qRound(logical.width() * dpr), qRound(logical.height() * dpr)));
-        if (physicalGeometry.intersects(physical)) {
-            const QRect overlap = physicalGeometry.intersected(physical);
-            return QRect(
-                QPoint(logical.x() + qRound((overlap.x() - physicalGeometry.x()) / dpr),
-                       logical.y() + qRound((overlap.y() - physicalGeometry.y()) / dpr)),
-                QSize(qRound(overlap.width() / dpr), qRound(overlap.height() / dpr)));
-        }
+    const QVector<capture::MonitorInfo> monitors = capture::MonitorLayout::enumerate();
+    if (monitors.isEmpty()) {
+        return physical;
     }
-    return physical;
+    return capture::physicalRectToGlobalLogical(monitors, QRectF(physical)).toAlignedRect();
 }
 
 // 逻辑矩形所在的屏幕（取第一个相交的屏幕，找不到就用主屏）。

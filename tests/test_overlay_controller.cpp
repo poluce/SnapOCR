@@ -25,6 +25,7 @@ private slots:
     void dragSelectionThenConfirmEmitsCrop();
     void cancelEmitsFinishedAndDeactivates();
     void confirmWithoutSelectionDoesNothing();
+    void ocrEdgeHintComparesPhysicalDesktop();
 
 private:
     QRect screenGeometry() const;
@@ -185,6 +186,44 @@ void OverlayControllerTest::confirmWithoutSelectionDoesNothing()
     m_controller->requestConfirm();
     QCOMPARE(copySpy.count(), 0);
     QVERIFY(!m_controller->isActive());
+}
+
+void OverlayControllerTest::ocrEdgeHintComparesPhysicalDesktop()
+{
+    // 混合 DPI：选区矩形是物理像素，桌面边缘也必须用物理矩形比较。
+    // 修复前拿物理选区去比逻辑桌面（800 宽 vs 400 宽），贴住右边缘会漏报。
+    m_controller->setDetectWindows(false);
+    const QRect physical(0, 0, 800, 600);
+    const QRect logical(0, 0, 400, 300);
+    m_controller->setCaptureProvider(
+        [physical, logical](bool, capture::CaptureResult* result, QString*) {
+            capture::MonitorInfo monitor;
+            monitor.id = QStringLiteral("test-monitor");
+            monitor.displayName = QStringLiteral("Test");
+            monitor.primary = true;
+            monitor.physicalGeometry = physical;
+            monitor.logicalGeometry = logical;
+            monitor.devicePixelRatio = 2.0;
+
+            capture::ScreenFrame frame;
+            frame.monitor = monitor;
+            frame.image = QImage(physical.size(), QImage::Format_ARGB32);
+            frame.image.fill(QColor(0x20, 0x60, 0xC0));
+
+            result->screens.append(frame);
+            result->virtualGeometry = physical;
+            result->capturedAtMs = 0;
+            return true;
+        });
+
+    m_controller->beginCapture();
+    QVERIFY(m_controller->isActive());
+    overlay::OverlayWindow* window = firstOverlay(m_controller);
+    QVERIFY(window != nullptr);
+
+    // 全局逻辑 (399, 99) 换算成物理 (798, 198)，贴在 800×600 物理桌面的右边缘。
+    dragSelection(window, QPoint(378, 50), QPoint(399, 99));
+    QVERIFY(m_controller->lastSelectionTouchesScreenEdge());
 }
 
 QTEST_MAIN(OverlayControllerTest)

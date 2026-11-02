@@ -9,6 +9,7 @@ using snapocr::capture::MonitorInfo;
 using snapocr::capture::localLogicalToPhysical;
 using snapocr::capture::monitorAtPhysical;
 using snapocr::capture::physicalToLocalLogical;
+using snapocr::capture::physicalRectToGlobalLogical;
 using snapocr::capture::physicalRectToLocalLogical;
 
 namespace {
@@ -37,6 +38,7 @@ private slots:
     void convertsRectBetweenSpaces();
     void findsMonitorAtPhysicalPosition();
     void handlesFractionalDprWithinTolerance();
+    void convertsPhysicalRectOnSecondaryToGlobalLogical();
 };
 
 void CoordinateMapTest::mapsLocalPointToPhysicalAt200Percent()
@@ -88,6 +90,19 @@ void CoordinateMapTest::handlesFractionalDprWithinTolerance()
     const QPointF local = physicalToLocalLogical(monitor, physical);
     QVERIFY(qAbs(local.x() - 100.0) < 0.001);
     QVERIFY(qAbs(local.y() - 50.0) < 0.001);
+}
+
+void CoordinateMapTest::convertsPhysicalRectOnSecondaryToGlobalLogical()
+{
+    // 主屏 125%、副屏 100% 且副屏物理原点不与逻辑原点成 dpr 倍数：
+    // 旧实现按 logical×dpr 反推物理原点，会把副屏区域算偏。
+    QVector<MonitorInfo> monitors;
+    monitors.append(makeMonitor(QRect(0, 0, 1920, 1200), QRect(0, 0, 1536, 960), 1.25, true));
+    monitors.append(makeMonitor(QRect(1920, -198, 1920, 1080), QRect(1536, -198, 1920, 1080), 1.0));
+
+    const QRectF logical =
+        physicalRectToGlobalLogical(monitors, QRectF(2000, 0, 800, 600));
+    QCOMPARE(logical, QRectF(1616, 0, 800, 600));
 }
 
 QTEST_GUILESS_MAIN(CoordinateMapTest)

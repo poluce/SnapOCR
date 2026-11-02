@@ -62,6 +62,10 @@ protected:
 
 private:
     QPoint physicalFromGlobal(const QPointF& globalLogical) const;
+    // 覆盖层窗口的绘制坐标以本屏左上角为原点；放大镜/悬停/取色必须先换算，
+    // 否则副屏（全局坐标带偏移）与高 DPI 屏会取错位置或越界。
+    QPoint localLogicalFromGlobal(const QPointF& globalLogical) const;
+    QPoint localPhysicalFromGlobal(const QPointF& globalLogical) const;
     QRectF selectionInLocal() const;
     void paintHud(QPainter& painter, const QRectF& selectionLocal);
     void paintMagnifier(QPainter& painter);
@@ -72,10 +76,10 @@ private:
     bool m_interactive = true;
     bool m_dragging = false;
     SelectionModel::Handle m_activeHandle = SelectionModel::Handle::None;
-    // 放大镜状态（位置/取样点/是否显示）
+    // 放大镜状态（位置/取样点/是否显示）；位置与取样点均为本屏内坐标。
     bool m_magnifierVisible = false;
-    QPoint m_magnifierCursorLogical;
-    QPoint m_magnifierSamplePhysical;
+    QPoint m_magnifierLocalLogical;
+    QPoint m_magnifierSampleLocalPhysical;
 
     bool m_hoverWindowVisible = false;
     QRect m_hoverWindowPhysical;  // 虚拟桌面物理坐标
