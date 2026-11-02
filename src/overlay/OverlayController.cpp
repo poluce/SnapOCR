@@ -74,18 +74,25 @@ void OverlayController::updateMagnifierFromCursor()
         return;
     }
     const QPoint globalLogical = QCursor::pos();
+    OverlayWindow* target = nullptr;
     for (OverlayWindow* window : m_overlays) {
         if (window == nullptr || !window->isSelectionInteractive()) {
             continue;
         }
         if (window->monitor().logicalGeometry.contains(globalLogical)) {
-            window->updateWindowHover(globalLogical);
-            window->showMagnifierAt(globalLogical);
-            return;
+            target = window;
+            break;
         }
     }
+    // 跨屏移动时要把上一块屏的放大镜/悬停清掉，否则会在副屏留下残影。
     for (OverlayWindow* window : m_overlays) {
-        if (window != nullptr) {
+        if (window == nullptr) {
+            continue;
+        }
+        if (window == target) {
+            window->updateWindowHover(globalLogical);
+            window->showMagnifierAt(globalLogical);
+        } else {
             window->hideMagnifier();
             window->clearWindowHover();
         }
@@ -572,15 +579,14 @@ void OverlayController::requestCopy()
 
 bool OverlayController::lastSelectionTouchesScreenEdge() const
 {
-    if (m_virtualLogicalDesktop.isEmpty()) {
-        return false;
-    }
     const QRect selection = m_selection.rect();
-    if (selection.isEmpty()) {
+    const QRect desktop = m_result.virtualGeometry;
+    if (selection.isEmpty() || desktop.isEmpty()) {
         return false;
     }
-    // 选区与虚拟桌面都用逻辑坐标，直接比较边界即可
-    return ocr::selectionTouchesScreenEdge(selection, m_virtualLogicalDesktop);
+    // 选区是物理像素矩形，桌面边缘也必须用物理矩形比较；逻辑桌面在
+    // 混合 DPI（如主屏 125% + 副屏 100%）下尺寸与物理像素不一致。
+    return ocr::selectionTouchesScreenEdge(selection, desktop);
 }
 
 void OverlayController::handleDragOut(const QRect& physicalSelection)

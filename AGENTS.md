@@ -115,7 +115,7 @@ ctest --test-dir build --output-on-failure
 
 ```text
 构建：MSVC 19.51 + Qt 6.11.1，/W4 零告警，全量编译通过
-测试：ctest 39/39 passed（含坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/
+测试：ctest 40/40 passed（含显示器配对/双屏覆盖层/坐标/选区/裁剪/标注/画布/热键/设置/自启/OCR/
       主题/历史/贴图/长截图/窗口识别/覆盖层主链路/编辑窗/i18n/资源度量/冒烟/UI 预览/更新解析与更新检查）
 稳定性：SnapOCR.exe --stability-selftest → 20 轮 PASS（GDI 零增长）
 性能：SnapOCR.exe --perf-selftest → PASS（热键→遮罩 67ms / 4K 捕获 57ms /
@@ -123,6 +123,7 @@ ctest --test-dir build --output-on-failure
 冒烟：SnapOCR.exe --smoke-test → platform=windows, PASS, exit 0
 聚合：SnapOCR.exe --selftest-all → PASS（4/4：smoke/capture/stability/perf）
 真机：scripts\e2e-smoke.ps1 → ALL PASS（F1 截图 801x601 / F4 OCR 已知文本 / Esc）
+多屏：混合 DPI 双屏（1920×1200@125% + 3840×2160@200%）覆盖层/放大镜/逐屏捕获验证通过
 注：构建后 build/ 已自包含 Qt（windeployqt POST_BUILD），无需 PATH 即可运行
 CLI：SnapOCR.exe --version → SnapOCR 0.2.2-rc.1 测试构建；--check-update 检查更新；--capture-dump <文件> 多屏捕获诊断（整屏+逐屏 PNG）
 发布：v0.0.1 / v0.1.0 / v0.1.1 / v0.1.2 / v0.2.0 / v0.2.1 / v0.2.2-rc.1(测试)

@@ -13,16 +13,9 @@
 namespace snapocr::capture {
 namespace {
 
-struct RawMonitor
-{
-    QString deviceName;
-    bool primary = false;
-    QRect physicalGeometry;
-};
-
 BOOL CALLBACK monitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM lParam)
 {
-    auto* raw = reinterpret_cast<QVector<RawMonitor>*>(lParam);
+    auto* raw = reinterpret_cast<QVector<detail::RawMonitorInfo>*>(lParam);
     if (raw == nullptr) {
         return TRUE;
     }
@@ -31,7 +24,7 @@ BOOL CALLBACK monitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM lParam)
     if (::GetMonitorInfoW(hMonitor, &info) == FALSE) {
         return TRUE;
     }
-    RawMonitor monitor;
+    detail::RawMonitorInfo monitor;
     monitor.deviceName = QString::fromWCharArray(info.szDevice);
     monitor.primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
     monitor.physicalGeometry = QRect(info.rcMonitor.left,
@@ -42,35 +35,24 @@ BOOL CALLBACK monitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM lParam)
     return TRUE;
 }
 
-// Qt 的 QScreen::name() 在 Windows 上不保证是 \\.\DISPLAY1（可能是显示器型号名），
-// 因此按“名字 → 主屏 → 相对位置排序”三级策略匹配；仍然落空时退化为 1:1。
-QHash<QString, QScreen*> screensByName(const QList<QScreen*>& screens)
+void applyScreen(MonitorInfo* monitor, const detail::ScreenInfo& screen)
 {
-    QHash<QString, QScreen*> result;
-    for (QScreen* screen : screens) {
-        result.insert(screen->name(), screen);
-    }
-    return result;
-}
-
-void applyScreen(MonitorInfo* monitor, QScreen* screen)
-{
-    if (monitor == nullptr || screen == nullptr) {
+    if (monitor == nullptr) {
         return;
     }
-    monitor->displayName = screen->name();
-    monitor->logicalGeometry = screen->geometry();
+    monitor->displayName = screen.name;
+    monitor->logicalGeometry = screen.logicalGeometry;
 
     // 用“物理宽 / 逻辑宽”反推有效缩放比：这样把物理像素图绘制到逻辑矩形时
     // 恰好落到物理像素上（1:1），也避免 Qt 报告的 dpr 与几何不一致。
-    const int logicalWidth = screen->geometry().width();
-    const int logicalHeight = screen->geometry().height();
+    const int logicalWidth = screen.logicalGeometry.width();
+    const int logicalHeight = screen.logicalGeometry.height();
     if (logicalWidth > 0 && logicalHeight > 0) {
         const qreal dprX = static_cast<qreal>(monitor->physicalGeometry.width()) / logicalWidth;
         const qreal dprY = static_cast<qreal>(monitor->physicalGeometry.height()) / logicalHeight;
         monitor->devicePixelRatio = (dprX + dprY) / 2.0;
     } else {
-        monitor->devicePixelRatio = screen->devicePixelRatio();
+        monitor->devicePixelRatio = screen.devicePixelRatio;
     }
     if (monitor->devicePixelRatio <= 0.0) {
         monitor->devicePixelRatio = 1.0;
@@ -79,80 +61,60 @@ void applyScreen(MonitorInfo* monitor, QScreen* screen)
 
 }  // namespace
 
-QVector<MonitorInfo> MonitorLayout::enumerate()
+namespace detail {
+
+QVector<int> matchScreens(const QVector<RawMonitorInfo>& monitors,
+                          const QVector<ScreenInfo>& screens, int primaryScreenIndex)
 {
-    QVector<RawMonitor> raw;
-    ::EnumDisplayMonitors(nullptr, nullptr, monitorEnumProc, reinterpret_cast<LPARAM>(&raw));
-    if (raw.isEmpty()) {
-        return {};
-    }
-
-    const QList<QScreen*> screens = QGuiApplication::screens();
-    const QHash<QString, QScreen*> byName = screensByName(screens);
-
-    QVector<MonitorInfo> monitors;
-    monitors.reserve(raw.size());
-    for (const RawMonitor& item : raw) {
-        MonitorInfo monitor;
-        monitor.id = item.deviceName;
-        monitor.displayName = item.deviceName;
-        monitor.primary = item.primary;
-        monitor.physicalGeometry = item.physicalGeometry;
-        monitor.logicalGeometry = item.physicalGeometry;
-        monitor.devicePixelRatio = 1.0;
-        monitors.append(monitor);
-    }
-
+    QVector<int> result(monitors.size(), -1);
     QVector<bool> usedScreens(screens.size(), false);
 
-    auto matchWith = [&](int monitorIndex, QScreen* screen) {
-        if (screen == nullptr) {
+    auto match = [&](int monitorIndex, int screenIndex) {
+        if (monitorIndex < 0 || monitorIndex >= monitors.size() || screenIndex < 0
+            || screenIndex >= screens.size() || usedScreens[screenIndex]) {
             return false;
         }
-        const int screenIndex = screens.indexOf(screen);
-        if (screenIndex >= 0) {
-            if (usedScreens[screenIndex]) {
-                return false;
-            }
-            usedScreens[screenIndex] = true;
-        }
-        applyScreen(&monitors[monitorIndex], screen);
+        usedScreens[screenIndex] = true;
+        result[monitorIndex] = screenIndex;
         return true;
     };
 
     // 1) 按名字精确匹配（Qt 可能给出设备名，也可能给出型号名）
+    QHash<QString, int> byName;
+    for (int i = 0; i < screens.size(); ++i) {
+        byName.insert(screens[i].name, i);
+    }
     for (int i = 0; i < monitors.size(); ++i) {
-        const auto it = byName.constFind(monitors[i].id);
+        const auto it = byName.constFind(monitors[i].deviceName);
         if (it != byName.constEnd()) {
-            matchWith(i, it.value());
+            match(i, it.value());
         }
     }
 
-    // 2) 主屏匹配
-    QScreen* primaryScreen = QGuiApplication::primaryScreen();
+    // 2) 主屏匹配：不能用 displayName == deviceName 判断“是否已匹配”，
+    // 因为名字匹配成功时两者恰好相等，会被误当成未匹配并与副屏交换。
     for (int i = 0; i < monitors.size(); ++i) {
-        if (!monitors[i].primary || monitors[i].displayName != monitors[i].id) {
+        if (result[i] >= 0 || !monitors[i].primary) {
             continue;
         }
-        matchWith(i, primaryScreen);
+        match(i, primaryScreenIndex);
     }
 
     // 3) 剩余按“相对主屏的方位”匹配：把未匹配的 Win32 显示器与 Qt 屏幕各自排序后配对
     QVector<int> unmatchedMonitors;
     for (int i = 0; i < monitors.size(); ++i) {
-        if (monitors[i].displayName == monitors[i].id) {
+        if (result[i] < 0) {
             unmatchedMonitors.append(i);
         }
     }
-    QVector<QScreen*> unmatchedScreens;
+    QVector<int> unmatchedScreens;
     for (int i = 0; i < screens.size(); ++i) {
         if (!usedScreens[i]) {
-            unmatchedScreens.append(screens[i]);
+            unmatchedScreens.append(i);
         }
     }
 
     if (!unmatchedMonitors.isEmpty() && !unmatchedScreens.isEmpty()) {
-        const QRect primaryPhysical = monitors.isEmpty() ? QRect() : monitors.first().physicalGeometry;
         std::sort(unmatchedMonitors.begin(), unmatchedMonitors.end(), [&](int a, int b) {
             const QRect ra = monitors[a].physicalGeometry;
             const QRect rb = monitors[b].physicalGeometry;
@@ -161,23 +123,63 @@ QVector<MonitorInfo> MonitorLayout::enumerate()
             }
             return ra.y() < rb.y();
         });
-        std::sort(unmatchedScreens.begin(), unmatchedScreens.end(),
-                  [](QScreen* a, QScreen* b) {
-                      const QPoint pa = a->geometry().topLeft();
-                      const QPoint pb = b->geometry().topLeft();
-                      if (pa.x() != pb.x()) {
-                          return pa.x() < pb.x();
-                      }
-                      return pa.y() < pb.y();
-                  });
-        Q_UNUSED(primaryPhysical);
+        std::sort(unmatchedScreens.begin(), unmatchedScreens.end(), [&](int a, int b) {
+            const QPoint pa = screens[a].logicalGeometry.topLeft();
+            const QPoint pb = screens[b].logicalGeometry.topLeft();
+            if (pa.x() != pb.x()) {
+                return pa.x() < pb.x();
+            }
+            return pa.y() < pb.y();
+        });
 
         const int count = std::min(unmatchedMonitors.size(), unmatchedScreens.size());
         for (int i = 0; i < count; ++i) {
-            matchWith(unmatchedMonitors[i], unmatchedScreens[i]);
+            match(unmatchedMonitors[i], unmatchedScreens[i]);
         }
     }
 
+    return result;
+}
+
+}  // namespace detail
+
+QVector<MonitorInfo> MonitorLayout::enumerate()
+{
+    QVector<detail::RawMonitorInfo> raw;
+    ::EnumDisplayMonitors(nullptr, nullptr, monitorEnumProc, reinterpret_cast<LPARAM>(&raw));
+    if (raw.isEmpty()) {
+        return {};
+    }
+
+    const QList<QScreen*> screens = QGuiApplication::screens();
+    QVector<detail::ScreenInfo> screenInfos;
+    screenInfos.reserve(screens.size());
+    for (const QScreen* screen : screens) {
+        detail::ScreenInfo info;
+        info.name = screen->name();
+        info.logicalGeometry = screen->geometry();
+        info.devicePixelRatio = screen->devicePixelRatio();
+        screenInfos.append(info);
+    }
+
+    const int primaryScreenIndex = screens.indexOf(QGuiApplication::primaryScreen());
+    const QVector<int> matches = detail::matchScreens(raw, screenInfos, primaryScreenIndex);
+
+    QVector<MonitorInfo> monitors;
+    monitors.reserve(raw.size());
+    for (int i = 0; i < raw.size(); ++i) {
+        MonitorInfo monitor;
+        monitor.id = raw[i].deviceName;
+        monitor.displayName = raw[i].deviceName;
+        monitor.primary = raw[i].primary;
+        monitor.physicalGeometry = raw[i].physicalGeometry;
+        monitor.logicalGeometry = raw[i].physicalGeometry;
+        monitor.devicePixelRatio = 1.0;
+        if (i < matches.size() && matches[i] >= 0) {
+            applyScreen(&monitor, screenInfos[matches[i]]);
+        }
+        monitors.append(monitor);
+    }
     return monitors;
 }
 

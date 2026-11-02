@@ -65,6 +65,18 @@ QPoint OverlayWindow::physicalFromGlobal(const QPointF& globalLogical) const
     return capture::globalLogicalToPhysicalPoint(*m_monitors, globalLogical);
 }
 
+QPoint OverlayWindow::localLogicalFromGlobal(const QPointF& globalLogical) const
+{
+    const QPoint origin = m_frame.monitor.logicalGeometry.topLeft();
+    return QPoint(qRound(globalLogical.x() - origin.x()),
+                  qRound(globalLogical.y() - origin.y()));
+}
+
+QPoint OverlayWindow::localPhysicalFromGlobal(const QPointF& globalLogical) const
+{
+    return physicalFromGlobal(globalLogical) - m_frame.monitor.physicalGeometry.topLeft();
+}
+
 QRectF OverlayWindow::selectionInLocal() const
 {
     if (m_selection == nullptr || !m_selection->isActive()) {
@@ -93,9 +105,10 @@ void OverlayWindow::paintEvent(QPaintEvent* event)
 
     // 3. 窗口识别高亮（悬停时显示，鼠标按下或已有选区时隐藏）
     if (m_hoverWindowVisible && !m_dragging && !m_selection->hasUsableSelection()) {
-        const QRect local =
-            m_hoverWindowPhysical.translated(-m_frame.monitor.physicalGeometry.topLeft());
-        const QRectF hoverRect(QPointF(local.topLeft()), QSizeF(local.size()));
+        // m_hoverWindowPhysical 是虚拟桌面物理坐标，绘制前换算到本屏逻辑坐标；
+        // 直接平移物理偏移量会在 DPR≠1 时位置和尺寸都偏大。
+        const QRectF hoverRect =
+            capture::physicalRectToLocalLogical(m_frame.monitor, QRectF(m_hoverWindowPhysical));
         QColor fill(0x1F, 0x6F, 0xEB);
         fill.setAlpha(38);
         painter.fillRect(hoverRect, fill);
@@ -299,8 +312,10 @@ void OverlayWindow::updateWindowHover(const QPointF& globalLogical)
         clearWindowHover();
         return;
     }
-    if (m_dragging || m_selection->hasUsableSelection()
-        || !rect().contains(globalLogical.toPoint())) {
+    // 绘制坐标以本屏左上角为原点；全局坐标直接与 rect() 比较时，
+    // 副屏（非零原点）永远不会命中，高 DPI 屏还会因逻辑/物理混用偏位。
+    const QPoint localLogical = localLogicalFromGlobal(globalLogical);
+    if (m_dragging || m_selection->hasUsableSelection() || !rect().contains(localLogical)) {
         clearWindowHover();
         return;
     }
@@ -343,13 +358,20 @@ void OverlayWindow::applyWindowSelection(const QRect& physicalRect)
 
 void OverlayWindow::showMagnifierAt(const QPoint& globalLogical)
 {
-    if (!m_interactive || !rect().contains(globalLogical)) {
+    if (!m_interactive) {
+        m_magnifierVisible = false;
+        return;
+    }
+    const QPoint localLogical = localLogicalFromGlobal(QPointF(globalLogical));
+    if (!rect().contains(localLogical)) {
         m_magnifierVisible = false;
         return;
     }
     m_magnifierVisible = true;
-    m_magnifierCursorLogical = globalLogical;
-    m_magnifierSamplePhysical = physicalFromGlobal(QPointF(globalLogical));
+    m_magnifierLocalLogical = localLogical;
+    // 取样坐标必须是屏内物理像素：frame.image 只包含本屏，直接用全局物理坐标
+    // 在副屏会整体越界（被 sampleColor 夹到边缘，取到错误颜色）。
+    m_magnifierSampleLocalPhysical = localPhysicalFromGlobal(QPointF(globalLogical));
     update();
 }
 
@@ -366,8 +388,8 @@ void OverlayWindow::paintMagnifier(QPainter& painter)
     if (!m_magnifierVisible) {
         return;
     }
-    const QRectF panel = ColorMagnifier::panelRect(m_magnifierCursorLogical, size());
-    ColorMagnifier::paint(painter, panel, m_frame.image, m_magnifierSamplePhysical);
+    const QRectF panel = ColorMagnifier::panelRect(m_magnifierLocalLogical, size());
+    ColorMagnifier::paint(painter, panel, m_frame.image, m_magnifierSampleLocalPhysical);
 }
 
 void OverlayWindow::mouseReleaseEvent(QMouseEvent* event)
@@ -422,7 +444,7 @@ void OverlayWindow::keyPressEvent(QKeyEvent* event)
         }
         // 单独 C：取色，把当前像素颜色复制到剪贴板
         emit colorCopyRequested(
-            ColorMagnifier::sampleColor(m_frame.image, m_magnifierSamplePhysical));
+            ColorMagnifier::sampleColor(m_frame.image, m_magnifierSampleLocalPhysical));
         return;
     }
     case Qt::Key_Escape:

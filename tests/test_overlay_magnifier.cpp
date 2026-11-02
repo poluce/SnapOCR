@@ -20,19 +20,20 @@ class OverlayMagnifierTest final : public QObject
 private slots:
     void paintedPanelVisibleWithoutSelection();
     void samplePointMatchesCursor();
+    void paintedPanelVisibleOnSecondaryMonitor();
     void clickingWindowSelectsItsRect();
 };
 
 namespace {
 
-capture::ScreenFrame makeFrame()
+capture::ScreenFrame makeFrame(const QPoint& origin = QPoint())
 {
     capture::MonitorInfo monitor;
     monitor.id = QStringLiteral("test");
-    monitor.physicalGeometry = QRect(0, 0, 400, 300);
-    monitor.logicalGeometry = QRect(0, 0, 400, 300);
+    monitor.physicalGeometry = QRect(origin, QSize(400, 300));
+    monitor.logicalGeometry = monitor.physicalGeometry;
     monitor.devicePixelRatio = 1.0;
-    monitor.primary = true;
+    monitor.primary = origin.isNull();
 
     capture::ScreenFrame frame;
     frame.monitor = monitor;
@@ -103,6 +104,50 @@ void OverlayMagnifierTest::samplePointMatchesCursor()
     // 绘制面板中心格用的就是这个取样点，直接验证取色函数与该点一致
     QCOMPARE(ColorMagnifier::sampleColor(frame.image, QPoint(65, 65)), QColor(0xFF, 0x00, 0x00));
     window.hideMagnifier();
+}
+
+void OverlayMagnifierTest::paintedPanelVisibleOnSecondaryMonitor()
+{
+    // 副屏位于主屏左侧时全局逻辑坐标为负：覆盖层窗口内坐标要减去屏原点。
+    // 修复前 rect().contains(globalLogical) 直接判失败，放大镜在副屏不显示。
+    const QRect geometry(-400, 0, 400, 300);
+    const capture::ScreenFrame frame = makeFrame(geometry.topLeft());
+    const QVector<capture::MonitorInfo> monitors{frame.monitor};
+    SelectionModel selection;
+    selection.setBounds(frame.monitor.physicalGeometry);
+
+    OverlayWindow window(frame, &monitors, &selection);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    // 全局 (-335, 65) == 该屏内 (65, 65)，取样点正落在红色块上
+    window.showMagnifierAt(geometry.topLeft() + QPoint(65, 65));
+    QTest::qWait(30);
+    const QImage rendered = window.grab().toImage();
+    QVERIFY(!rendered.isNull());
+
+    const QRectF panel = ColorMagnifier::panelRect(QPoint(65, 65), window.size());
+    int brightPixels = 0;
+    for (int y = static_cast<int>(panel.top()) + 4;
+         y < static_cast<int>(panel.bottom()) - 4 && y < rendered.height(); y += 3) {
+        for (int x = static_cast<int>(panel.left()) + 4;
+             x < static_cast<int>(panel.right()) - 4 && x < rendered.width(); x += 3) {
+            if (qGray(rendered.pixel(x, y)) > 180) {
+                ++brightPixels;
+            }
+        }
+    }
+    QVERIFY2(brightPixels > 20, qPrintable(QStringLiteral("bright=%1").arg(brightPixels)));
+
+    // 中心格颜色来自屏幕内取样点；若仍用全局物理坐标索引屏内图像，会越界取到黑色。
+    const int half = ColorMagnifier::kGridPixels / 2;
+    const int centerX = qRound(panel.left() + ColorMagnifier::kPadding
+                               + half * ColorMagnifier::kCellSize
+                               + ColorMagnifier::kCellSize / 2.0);
+    const int centerY = qRound(panel.top() + ColorMagnifier::kPadding
+                               + half * ColorMagnifier::kCellSize
+                               + ColorMagnifier::kCellSize / 2.0);
+    QCOMPARE(rendered.pixelColor(centerX, centerY), QColor(0xFF, 0x00, 0x00));
 }
 
 void OverlayMagnifierTest::clickingWindowSelectsItsRect()
